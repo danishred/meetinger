@@ -62,7 +62,7 @@ class Summarizer:
             return False
 
     def generate_summary(
-        self, transcript_path: Path, meeting_title: str = ""
+        self, transcript_path: Path, meeting_title: str = "", output_dir: str = "output"
     ) -> Optional[str]:
         """
         Generate a markdown summary from transcript file.
@@ -70,6 +70,7 @@ class Summarizer:
         Args:
             transcript_path: Path to the transcript file to summarize
             meeting_title: Optional title for the meeting
+            output_dir: Directory to save the summary (can be video-specific)
 
         Returns:
             Markdown formatted summary, or None if summarization failed

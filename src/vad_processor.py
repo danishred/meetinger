@@ -161,10 +161,6 @@ class VADProcessor:
             segments = self._group_frames_into_segments(speech_frames, frame_size)
 
             logging.info(f"Detected {len(segments)} speech segments")
-            for i, segment in enumerate(segments):
-                logging.info(
-                    f"  Segment {i+1}: {segment.start_time:.2f}s - {segment.end_time:.2f}s ({segment.duration:.2f}s)"
-                )
 
             return segments
 
@@ -240,7 +236,7 @@ class VADProcessor:
             logging.warning("No speech segments found, returning original audio")
             return audio_path
 
-        # Create output directory
+        # Use the provided output directory (which should be video-specific)
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -308,7 +304,7 @@ class VADProcessor:
             # Detect speech segments
             speech_segments = self.detect_speech_segments(audio_path)
 
-            # Create output directory
+            # Use the provided output directory (which should be video-specific)
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
 

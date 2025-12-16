@@ -112,6 +112,27 @@ def construct_output_path(
     return Path(output_dir) / output_filename
 
 
+def get_video_output_dir(video_path: Path, base_output_dir: str = "output") -> Path:
+    """
+    Get the video-specific output directory path.
+
+    Args:
+        video_path: Path to the input video file
+        base_output_dir: Base output directory (default: "output")
+
+    Returns:
+        Path to the video-specific output directory
+    """
+    # Create directory name based on video filename (without extension)
+    video_dir_name = video_path.stem
+    video_output_dir = Path(base_output_dir) / video_dir_name
+    
+    # Ensure the directory exists
+    video_output_dir.mkdir(parents=True, exist_ok=True)
+    
+    return video_output_dir
+
+
 def check_dependencies() -> bool:
     """
     Check if required dependencies are available.

@@ -26,6 +26,7 @@ from utils import (
     get_most_recent_video,
     ensure_output_dir,
     construct_output_path,
+    get_video_output_dir,
     check_dependencies,
 )
 from video_processor import extract_audio_from_video, cleanup_audio_file
@@ -446,19 +447,18 @@ def main():
         )
         console.print(f"   [dim]Processing may take longer than usual.[/dim]")
 
-    # Step 3: Ensure output directory exists
-    logging.info("\n[Step 3/7] Preparing output directory...")
-    logging.debug("main: Creating output directory")
-    if not ensure_output_dir(OUTPUT_DIR):
-        logging.error("Failed to create output directory")
-        return 1
+    # Step 3: Create video-specific output directory
+    logging.info("\n[Step 3/7] Preparing video-specific output directory...")
+    logging.debug("main: Creating video-specific output directory")
+    video_output_dir = get_video_output_dir(video_path, OUTPUT_DIR)
+    logging.info(f"Using output directory: {video_output_dir}")
 
     # Step 4: Extract audio from video
     logging.info("\n[Step 4/7] Extracting audio from video...")
     logging.debug("main: Starting audio extraction")
     console.print("🎵 [blue]Extracting audio from video...[/blue]")
     start_time = time.time()
-    audio_path = extract_audio_from_video(video_path, OUTPUT_DIR)
+    audio_path = extract_audio_from_video(video_path, str(video_output_dir))
     timing_data["video_extraction"] = time.time() - start_time
     if not audio_path:
         logging.error("Failed to extract audio from video")
@@ -485,7 +485,7 @@ def main():
                 aggressiveness=VAD_AGGRESSIVENESS,
                 max_silence_duration=1.5,
                 min_speech_duration=0.5,
-                output_dir=OUTPUT_DIR,
+                output_dir=str(video_output_dir),
             )
             vad_time = time.time() - start_time
             timing_data["vad_processing"] = vad_time
@@ -542,7 +542,7 @@ def main():
         if isinstance(audio_to_transcribe, str):
             audio_to_transcribe = Path(audio_to_transcribe)
         transcription = transcriber.transcribe_audio(
-            audio_to_transcribe, video_base_name
+            audio_to_transcribe, video_base_name, str(video_output_dir)
         )
         print(f"Audio file: {audio_to_transcribe} is being transcribed")
         stt_time = time.time() - start_time
@@ -591,14 +591,18 @@ def main():
 
     # Generate summary from transcript file
     meeting_title = video_path.stem.replace("_", " ").replace("-", " ")
-    transcript_path = Path("transcript") / f"{video_base_name}_transcript.md"
+    transcript_path = (
+        Path(video_output_dir) / "transcript" / f"{video_base_name}_transcript.md"
+    )
 
     logging.info(f"Reading transcript from: {transcript_path}")
     with console.status(
         "[bold green]Generating summary with LLM...[/bold green]"
     ) as status:
         start_time = time.time()
-        summary = summarizer.generate_summary(transcript_path, meeting_title)
+        summary = summarizer.generate_summary(
+            transcript_path, meeting_title, str(video_output_dir)
+        )
         llm_time = time.time() - start_time
         timing_data["llm_summarization"] = llm_time
 
@@ -610,7 +614,7 @@ def main():
     logging.debug(f"main: Summary generation completed, duration: {llm_time:.2f}s")
 
     # Save summary to file
-    summary_path = construct_output_path(video_path, OUTPUT_DIR, ".md")
+    summary_path = construct_output_path(video_path, str(video_output_dir), ".md")
     if not summarizer.save_summary(summary, summary_path):
         logging.error("Failed to save summary")
         return 1

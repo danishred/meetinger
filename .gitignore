@@ -37,9 +37,10 @@ env/
 
 # Application specific
 videos/*.mp4
-output/*.wav
-output/*.md
-transcript/*.md
+output/*
+!output/.gitkeep
+transcript/*
+!transcript/.gitkeep
 
 # Logs
 *.log

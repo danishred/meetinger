@@ -25,7 +25,7 @@ def extract_audio_from_video(
         logging.error(f"Video file not found: {video_path}")
         return None
 
-    # Create output directory if it doesn't exist
+    # Use the provided output directory (which should be video-specific)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 

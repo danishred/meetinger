@@ -40,7 +40,7 @@ class Transcriber:
             return False
 
     def save_transcript_to_file(
-        self, transcript_text: str, video_base_name: str
+        self, transcript_text: str, video_base_name: str, output_dir: str = "output"
     ) -> Optional[Path]:
         """
         Save transcript to a markdown file in the transcript folder.
@@ -48,13 +48,14 @@ class Transcriber:
         Args:
             transcript_text: The transcribed text to save
             video_base_name: Base name of the video file (without extension)
+            output_dir: Directory to save the transcript (can be video-specific)
 
         Returns:
             Path to the saved transcript file, or None if save failed
         """
         try:
             # Create transcript directory if it doesn't exist
-            transcript_dir = Path("transcript")
+            transcript_dir = Path(output_dir) / "transcript"
             transcript_dir.mkdir(parents=True, exist_ok=True)
 
             # Create transcript file path
@@ -101,7 +102,7 @@ class Transcriber:
         return formatted
 
     def transcribe_audio(
-        self, audio_path: Path, video_base_name: str = None
+        self, audio_path: Path, video_base_name: str = None, output_dir: str = "output"
     ) -> Optional[str]:
         """
         Transcribe audio file to text and save to transcript folder.
@@ -152,7 +153,7 @@ class Transcriber:
             # Save transcript to file if video_base_name is provided
             if video_base_name:
                 transcript_path = self.save_transcript_to_file(
-                    transcription, video_base_name
+                    transcription, video_base_name, output_dir
                 )
                 if transcript_path:
                     logging.info(f"Transcript saved to: {transcript_path}")
@@ -273,7 +274,7 @@ class WhisperHinglishTranscriber:
             return False
 
     def save_transcript_to_file(
-        self, transcript_text: str, video_base_name: str
+        self, transcript_text: str, video_base_name: str, output_dir: str = "output"
     ) -> Optional[Path]:
         """
         Save transcript to a markdown file in the transcript folder.
@@ -281,13 +282,14 @@ class WhisperHinglishTranscriber:
         Args:
             transcript_text: The transcribed text to save
             video_base_name: Base name of the video file (without extension)
+            output_dir: Directory to save the transcript (can be video-specific)
 
         Returns:
             Path to the saved transcript file, or None if save failed
         """
         try:
             # Create transcript directory if it doesn't exist
-            transcript_dir = Path("transcript")
+            transcript_dir = Path(output_dir) / "transcript"
             transcript_dir.mkdir(parents=True, exist_ok=True)
 
             # Create transcript file path
@@ -334,7 +336,7 @@ class WhisperHinglishTranscriber:
         return formatted
 
     def transcribe_audio(
-        self, audio_path: Path, video_base_name: str = None
+        self, audio_path: Path, video_base_name: str = None, output_dir: str = "output"
     ) -> Optional[str]:
         """
         Transcribe audio file to Hinglish text and save to transcript folder.
@@ -378,7 +380,7 @@ class WhisperHinglishTranscriber:
             # Save transcript to file if video_base_name is provided
             if video_base_name:
                 transcript_path = self.save_transcript_to_file(
-                    transcription, video_base_name
+                    transcription, video_base_name, output_dir
                 )
                 if transcript_path:
                     logging.info(f"Hinglish transcript saved to: {transcript_path}")
