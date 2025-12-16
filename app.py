@@ -3,7 +3,7 @@
 Meeting Summary Generator
 
 A Python application that processes MP4 video files to generate meeting summaries.
-Workflow: MP4 → Audio Extraction → Transcription → Summary Generation → Markdown Output
+Workflow: MP4 → Audio Extraction → VAD Processing → Transcription → Summary Generation → Markdown Output
 """
 
 import sys
@@ -29,15 +29,22 @@ from utils import (
 from video_processor import extract_audio_from_video, cleanup_audio_file
 from transcriber import Transcriber, WhisperHinglishTranscriber
 from summarizer import Summarizer
+from vad_processor import VADProcessor, process_audio_with_vad
 
 # Initialize Rich console and timing tracker
 console = Console()
 timing_data = {
     "video_extraction": 0,
+    "vad_processing": 0,
     "stt_transcription": 0,
     "llm_summarization": 0,
     "total": 0,
 }
+
+# Configuration options
+USE_VAD = True  # Enable/disable Voice Activity Detection
+VAD_AGGRESSIVENESS = 3  # VAD aggressiveness level (0-3)
+CREATE_VISUALIZATION = True  # Create speech activity visualization
 
 
 def get_video_from_input_folder():
@@ -312,13 +319,13 @@ def main():
         console.print(f"   [dim]Processing may take longer than usual.[/dim]")
 
     # Step 3: Ensure output directory exists
-    logging.info("\n[Step 3/6] Preparing output directory...")
+    logging.info("\n[Step 3/7] Preparing output directory...")
     if not ensure_output_dir(OUTPUT_DIR):
         logging.error("Failed to create output directory")
         return 1
 
     # Step 4: Extract audio from video
-    logging.info("\n[Step 4/6] Extracting audio from video...")
+    logging.info("\n[Step 4/7] Extracting audio from video...")
     console.print("🎵 [blue]Extracting audio from video...[/blue]")
     start_time = time.time()
     audio_path = extract_audio_from_video(video_path, OUTPUT_DIR)
@@ -330,8 +337,44 @@ def main():
         f"✅ [green]Audio extracted in {timing_data['video_extraction']:.2f}s[/green]"
     )
 
-    # Step 5: Transcribe audio
-    logging.info("\n[Step 5/6] Transcribing audio...")
+    # Step 5: Process audio with VAD (if enabled)
+    audio_to_transcribe = audio_path
+    if USE_VAD:
+        logging.info("\n[Step 5/7] Processing audio with Voice Activity Detection...")
+        vad_processor = VADProcessor(aggressiveness=VAD_AGGRESSIVENESS)
+
+        with console.status(
+            "[bold blue]Applying Voice Activity Detection...[/bold blue]"
+        ) as status:
+            start_time = time.time()
+            filtered_audio_path, total_speech_duration = process_audio_with_vad(
+                audio_path=str(audio_path),
+                aggressiveness=VAD_AGGRESSIVENESS,
+                max_silence_duration=1.5,
+                min_speech_duration=0.5,
+                output_dir=OUTPUT_DIR,
+            )
+            vad_time = time.time() - start_time
+            timing_data["vad_processing"] = vad_time
+
+        if filtered_audio_path:
+            audio_to_transcribe = filtered_audio_path
+            console.print(
+                f"✅ [blue]VAD processing completed in {vad_time:.2f}s[/blue]"
+            )
+            console.print(f"🎯 [blue]Filtered audio ready for transcription[/blue]")
+            console.print(
+                f"📊 [blue]Total speech duration: {total_speech_duration:.2f}s[/blue]"
+            )
+        else:
+            console.print(
+                "⚠️ [yellow]VAD processing failed, using original audio[/yellow]"
+            )
+    else:
+        logging.info("\n[Step 5/7] Skipping VAD processing...")
+
+    # Step 6: Transcribe audio
+    logging.info("\n[Step 6/7] Transcribing audio...")
 
     # Load the selected model with timeout handling
     console.print(f"📦 [blue]Loading {type(transcriber).__name__}...[/blue]")
@@ -341,6 +384,8 @@ def main():
         logging.error(f"Failed to load {type(transcriber).__name__}")
         if CLEANUP_AUDIO:
             cleanup_audio_file(audio_path)
+            if USE_VAD and filtered_audio_path and filtered_audio_path != audio_path:
+                cleanup_audio_file(filtered_audio_path)
         return 1
     console.print(
         f"✅ [green]{type(transcriber).__name__} loaded successfully![/green]"
@@ -352,7 +397,9 @@ def main():
     # Transcribe audio and save to transcript folder
     with console.status("[bold green]Transcribing audio...[/bold green]") as status:
         start_time = time.time()
-        transcription = transcriber.transcribe_audio(audio_path, video_base_name)
+        transcription = transcriber.transcribe_audio(
+            audio_to_transcribe, video_base_name
+        )
         stt_time = time.time() - start_time
         timing_data["stt_transcription"] = stt_time
 
@@ -360,6 +407,8 @@ def main():
         logging.error("Failed to transcribe audio")
         if CLEANUP_AUDIO:
             cleanup_audio_file(audio_path)
+            if USE_VAD and filtered_audio_path and filtered_audio_path != audio_path:
+                cleanup_audio_file(filtered_audio_path)
         return 1
 
     console.print(f"✅ [green]Transcription completed in {stt_time:.2f}s[/green]")
@@ -371,8 +420,8 @@ def main():
     if CLEANUP_AUDIO:
         cleanup_audio_file(audio_path)
 
-    # Step 6: Generate summary
-    logging.info("\n[Step 6/6] Generating meeting summary...")
+    # Step 7: Generate summary
+    logging.info("\n[Step 7/7] Generating meeting summary...")
     summarizer = Summarizer(model_name=OLLAMA_MODEL)
 
     # Check if model is available, pull if not
