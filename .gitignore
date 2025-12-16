@@ -2,10 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
-output/
-input/
+*.mp4
 *.so
 .Python
+.env
 build/
 develop-eggs/
 dist/

@@ -29,12 +29,14 @@ from utils import (
 from video_processor import extract_audio_from_video, cleanup_audio_file
 from transcriber import Transcriber, WhisperHinglishTranscriber
 from summarizer import Summarizer
+from diarizer import Diarizer
 
 # Initialize Rich console and timing tracker
 console = Console()
 timing_data = {
     "video_extraction": 0,
     "stt_transcription": 0,
+    "speaker_diarization": 0,
     "llm_summarization": 0,
     "total": 0,
 }
@@ -220,6 +222,7 @@ def main():
     OUTPUT_DIR = "output"
     OLLAMA_MODEL = "qwen2.5:7b"
     CLEANUP_AUDIO = True  # Set to False to keep intermediate audio files
+    ENABLE_DIARIZATION = False  # Set to True to enable speaker diarization
 
     # Model selection
     print("\n" + "=" * 60)
@@ -252,6 +255,26 @@ def main():
         model_name = "Whisper (medium)"
 
     console.print(f"🤖 [blue]Selected Model:[/blue] {model_name}")
+
+    # Ask user if they want to enable speaker diarization
+    print("\n" + "=" * 60)
+    print("Speaker Diarization:")
+    print("=" * 60)
+    print("Enable speaker diarization to identify who spoke when?")
+    print("Note: This requires additional processing time and GPU memory")
+    print("=" * 60)
+    diarize_choice = input("Enable speaker diarization? (y/n) [n]: ").strip().lower()
+
+    logging.info(f"User input for diarization: '{diarize_choice}'")
+
+    if diarize_choice in ["y", "yes"]:
+        ENABLE_DIARIZATION = True
+        console.print("✅ [green]Speaker diarization enabled[/green]")
+        logging.info("User enabled speaker diarization")
+    else:
+        ENABLE_DIARIZATION = False
+        console.print("[dim]Speaker diarization disabled[/dim]")
+        logging.info("User disabled speaker diarization")
 
     print("=" * 60)
 
@@ -367,12 +390,225 @@ def main():
     logging.info("Transcription preview (first 200 chars):")
     logging.info(f"  {transcription[:200]}...")
 
+    # Step 6: Optional Speaker Diarization
+    transcript_path = None
+    if ENABLE_DIARIZATION:
+        logging.info("\n[Step 6/7] Performing speaker diarization...")
+        console.print("👥 [blue]Performing speaker diarization...[/blue]")
+        logging.info(f"ENABLE_DIARIZATION flag is True, proceeding with diarization")
+
+        # Initialize diarizer
+        logging.info("Initializing Diarizer...")
+
+        # Check for Hugging Face token in environment
+        import os
+        from dotenv import load_dotenv
+
+        load_dotenv()
+
+        hf_token = os.environ.get("HF_TOKEN")
+        logging.info(f"HF_TOKEN from environment: {'Set' if hf_token else 'Not set'}")
+
+        if hf_token:
+            diarizer = Diarizer(token=hf_token)
+            logging.info("Diarizer initialized with HF_TOKEN from environment")
+        else:
+            diarizer = Diarizer()
+            logging.warning(
+                "Diarizer initialized without HF_TOKEN - this may cause authentication errors"
+            )
+            logging.warning(
+                "Set HF_TOKEN environment variable to avoid authentication issues"
+            )
+
+        # Check if diarizer was properly initialized (dependencies available)
+        if diarizer.pipeline is None and not hasattr(diarizer, "device"):
+            # This means dependencies are missing
+            console.print(
+                "\n❌ [red]Speaker diarization dependencies are not installed![/red]"
+            )
+            console.print(
+                "[yellow]To enable speaker diarization, install the required dependencies:[/yellow]"
+            )
+            console.print("   pip install torch>=2.0.0")
+            console.print(
+                "   pip install 'pyannote.audio @ git+https://github.com/pyannote/pyannote-audio.git'"
+            )
+            console.print("   pip install pyannote.core librosa soundfile")
+            console.print(
+                "\n[yellow]You also need to accept the model terms on Hugging Face:[/yellow]"
+            )
+            console.print(
+                "   1. Visit https://huggingface.co/pyannote/speaker-diarization-3.1"
+            )
+            console.print("   2. Click 'Access repository' and accept the terms")
+            console.print("   3. Wait 5-10 minutes for permission to propagate")
+            console.print(
+                "   4. Set your token in .env file: HF_TOKEN='your_token_here'"
+            )
+            console.print(
+                "\n💡 [cyan]Tip:[/cyan] If you don't want to authenticate, the app will"
+            )
+            console.print(
+                "   automatically fall back to pyannote/speaker-diarization-2.0"
+            )
+            console.print(
+                "\n[yellow]Continuing without speaker diarization...[/yellow]\n"
+            )
+            transcript_path = Path("transcript") / f"{video_base_name}_transcript.md"
+            logging.warning(
+                "Diarization dependencies missing, continuing without diarization"
+            )
+            return
+
+        logging.info("Diarizer initialized")
+
+        # Load diarization model
+        logging.info("Loading diarization model...")
+        with console.status(
+            "[bold green]Loading diarization model...[/bold green]"
+        ) as status:
+            model_loaded = diarizer.load_model()
+            logging.info(f"Model loading result: {model_loaded}")
+
+            if not model_loaded:
+                console.print("\n[yellow]⚠️  Diarization model failed to load.[/yellow]")
+                console.print("[yellow]Possible reasons:[/yellow]")
+                console.print(
+                    "   • Model authentication failed (check HF_TOKEN in .env)"
+                )
+                console.print("   • Haven't accepted model terms on Hugging Face")
+                console.print("   • Insufficient GPU/CPU memory")
+                console.print("   • Network connectivity issues")
+                console.print(
+                    "\n💡 [cyan]Tip:[/cyan] Visit https://huggingface.co/pyannote/speaker-diarization-3.1"
+                )
+                console.print("   Click 'Access repository' and accept the terms")
+                console.print(
+                    "\n[yellow]Continuing without speaker diarization...[/yellow]\n"
+                )
+                logging.warning(
+                    "Diarization model failed to load. Continuing without diarization."
+                )
+                transcript_path = (
+                    Path("transcript") / f"{video_base_name}_transcript.md"
+                )
+                logging.info(f"Setting transcript_path to: {transcript_path}")
+            else:
+                logging.info("Model loaded successfully, proceeding with diarization")
+                # Perform diarization
+                logging.info("Starting diarization process...")
+                with console.status(
+                    "[bold green]Identifying speakers...[/bold green]"
+                ) as status:
+                    start_time = time.time()
+                    diarization_result = diarizer.diarize(audio_path)
+                    diarization_time = time.time() - start_time
+                    timing_data["speaker_diarization"] = diarization_time
+                    logging.info(f"Diarization took {diarization_time:.2f} seconds")
+
+                logging.info(f"Diarization result: {diarization_result is not None}")
+
+                if diarization_result:
+                    console.print(
+                        f"✅ [green]Diarization completed in {diarization_time:.2f}s[/green]"
+                    )
+                    logging.info(
+                        f"Identified {diarization_result['num_speakers']} speakers"
+                    )
+
+                    # Get transcription with timestamps for merging
+                    logging.info("Getting transcription with timestamps...")
+                    with console.status(
+                        "[bold green]Getting transcription with timestamps...[/bold green]"
+                    ) as status:
+                        transcription_result = transcriber.transcribe_with_timestamps(
+                            audio_path
+                        )
+                        logging.info(
+                            f"Transcription result: {transcription_result is not None}"
+                        )
+
+                    if transcription_result:
+                        logging.info("Merging diarization with transcription...")
+                        # Merge diarization with transcription
+                        merged_segments = diarizer.merge_with_transcription(
+                            diarization_result, transcription_result
+                        )
+                        logging.info(
+                            f"Merged segments: {len(merged_segments) if merged_segments else 0}"
+                        )
+
+                        if merged_segments:
+                            # Save diarized transcript
+                            meeting_title = video_path.stem.replace("_", " ").replace(
+                                "-", " "
+                            )
+                            logging.info(
+                                f"Saving diarized transcript with title: {meeting_title}"
+                            )
+                            transcript_path = diarizer.save_diarized_transcript(
+                                merged_segments, video_base_name, meeting_title
+                            )
+                            logging.info(f"Transcript saved to: {transcript_path}")
+
+                            if transcript_path:
+                                console.print(
+                                    f"✅ [green]Diarized transcript saved[/green]"
+                                )
+
+                                # Display speaker summary
+                                speaker_summary = diarizer.get_speaker_summary(
+                                    diarization_result
+                                )
+                                if speaker_summary:
+                                    console.print(f"\n👥 [cyan]Speaker Summary:[/cyan]")
+                                    for speaker, stats in speaker_summary.get(
+                                        "sorted_speakers", []
+                                    )[:5]:
+                                        duration = stats["total_duration"]
+                                        segments = stats["num_segments"]
+                                        console.print(
+                                            f"   {speaker}: {duration:.1f}s across {segments} segments"
+                                        )
+                        else:
+                            console.print(
+                                "[yellow]⚠️  Failed to merge diarization with transcription[/yellow]"
+                            )
+                            logging.warning(
+                                "Failed to merge diarization with transcription"
+                            )
+                            transcript_path = (
+                                Path("transcript") / f"{video_base_name}_transcript.md"
+                            )
+                    else:
+                        console.print(
+                            "[yellow]⚠️  Failed to get transcription with timestamps[/yellow]"
+                        )
+                        logging.warning("Failed to get transcription with timestamps")
+                        transcript_path = (
+                            Path("transcript") / f"{video_base_name}_transcript.md"
+                        )
+                else:
+                    console.print(
+                        "[yellow]⚠️  Diarization failed. Continuing without speaker labels.[/yellow]"
+                    )
+                    logging.warning(
+                        "Diarization failed, continuing without speaker labels"
+                    )
+                    transcript_path = (
+                        Path("transcript") / f"{video_base_name}_transcript.md"
+                    )
+    else:
+        logging.info("ENABLE_DIARIZATION flag is False, skipping diarization")
+        transcript_path = Path("transcript") / f"{video_base_name}_transcript.md"
+
     # Clean up audio file if requested
     if CLEANUP_AUDIO:
         cleanup_audio_file(audio_path)
 
-    # Step 6: Generate summary
-    logging.info("\n[Step 6/6] Generating meeting summary...")
+    # Step 7: Generate summary
+    logging.info("\n[Step 7/7] Generating meeting summary...")
     summarizer = Summarizer(model_name=OLLAMA_MODEL)
 
     # Check if model is available, pull if not
@@ -395,7 +631,6 @@ def main():
 
     # Generate summary from transcript file
     meeting_title = video_path.stem.replace("_", " ").replace("-", " ")
-    transcript_path = Path("transcript") / f"{video_base_name}_transcript.md"
 
     logging.info(f"Reading transcript from: {transcript_path}")
     with console.status(

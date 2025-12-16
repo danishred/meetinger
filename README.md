@@ -1,20 +1,22 @@
 # Meeting Summary Generator
 
-A Python application that automatically generates meeting summaries from MP4 video files. The application extracts audio, transcribes it using OpenAI's Whisper model, and generates structured markdown summaries using Ollama with Google's Gemma model.
+A Python application that automatically generates meeting summaries from MP4 video files. The application extracts audio, transcribes it using OpenAI's Whisper model, optionally performs speaker diarization to identify who spoke when, and generates structured markdown summaries using Ollama.
 
 ## Features
 
 - **Automatic Processing**: Simply drop an MP4 file in the `videos/` folder and run the application
-- **Local Transcription**: Uses OpenAI's Whisper medium model for accurate speech-to-text
-- **AI-Powered Summaries**: Generates structured markdown summaries using Google Gemma-3-1B via Ollama
+- **Local Transcription**: Uses OpenAI's Whisper or Whisper-Hinglish models for accurate speech-to-text
+- **Speaker Diarization**: Optional feature to identify who spoke when (requires additional setup)
+- **AI-Powered Summaries**: Generates structured markdown summaries using Ollama
 - **Clean Workflow**: Minimal setup, maximum automation
 - **Progress Logging**: Real-time feedback on processing steps
 - **Error Handling**: Comprehensive error checking and user-friendly messages
+- **Flexible Models**: Supports both English and Hinglish transcription
 
 ## System Architecture
 
 ```
-MP4 File → Audio Extraction (ffmpeg) → Transcription (Whisper) → Transcript File (Markdown) → Summary (Ollama/Gemma) → Summary Markdown
+MP4 File → Audio Extraction (ffmpeg) → Transcription (Whisper/Whisper-Hinglish) → [Optional: Speaker Diarization] → Transcript File (Markdown) → Summary (Ollama) → Summary Markdown
 ```
 
 ## Prerequisites
@@ -74,8 +76,26 @@ pip install -r requirements.txt
 
 4. **Pull the required Ollama model:**
 ```bash
-ollama pull google/gemma-3-1b
+ollama pull qwen2.5:7b
 ```
+
+### Optional: Speaker Diarization Setup
+
+To enable speaker diarization (identifying who spoke when):
+
+1. **Install additional dependencies:**
+```bash
+pip install pyannote.audio @ git+https://github.com/pyannote/pyannote-audio.git
+pip install pyannote.core pyannote.database pyannote.metrics
+pip install librosa>=0.9.0 soundfile>=0.10.0
+```
+
+2. **Set up Hugging Face authentication:**
+   - Create an account at [huggingface.co](https://huggingface.co)
+   - Generate an access token in your account settings
+   - Set the token: `export HF_TOKEN="your_token_here"`
+
+See [`DIARIZATION_README.md`](DIARIZATION_README.md) for detailed setup instructions.
 
 ## Project Structure
 
@@ -92,6 +112,7 @@ meeting-summary-generator/
     ├── utils.py           # Utility functions
     ├── video_processor.py # Video to audio conversion
     ├── transcriber.py     # Whisper transcription
+    ├── diarizer.py        # Speaker diarization (optional)
     └── summarizer.py      # Ollama summary generation
 ```
 
@@ -108,6 +129,7 @@ python app.py
 
 3. **Find your files:**
    - **Transcript**: `transcript/{video_name}_transcript.md`
+   - **Diarized Transcript** (if enabled): `transcript/{video_name}_diarized_transcript.md`
    - **Summary**: `output/{video_name}_summary.md`
 
 ### Example
@@ -126,25 +148,37 @@ ls output/
 
 ### Processing Workflow
 
-The application follows this 6-step process:
+The application follows this 7-step process:
 
 1. **Dependency Check**: Verifies all required tools are installed
-2. **Find MP4**: Locates the most recently modified MP4 file in `videos/`
+2. **Find Video**: Locates the most recently modified video file
 3. **Prepare Output**: Ensures output directory exists
 4. **Extract Audio**: Uses ffmpeg to extract audio (WAV format, 16kHz mono)
-5. **Transcribe**: Uses Whisper medium model to convert audio to text and saves transcript to `transcript/` folder
-6. **Generate Summary**: Reads transcript from file and uses Ollama with Gemma-3-1B to create structured markdown summary
+5. **Transcribe**: Uses Whisper or Whisper-Hinglish model to convert audio to text and saves transcript to `transcript/` folder
+6. **Speaker Diarization** (optional): Identifies speakers and creates diarized transcript with speaker labels
+7. **Generate Summary**: Reads transcript from file and uses Ollama to create structured markdown summary
 
 ### File Naming Convention
 
-- **Video**: `videos/meeting.mp4`
+- **Video**: `input/meeting.mp4` (or Windows Videos folder)
 - **Transcript**: `transcript/meeting_transcript.md`
-- **Summary**: `output/meeting_summary.md`
+- **Diarized Transcript**: `transcript/meeting_diarized_transcript.md` (if diarization enabled)
+- **Summary**: `output/meeting.md`
 
 ### Output Format
 
+#### Standard Transcript
 The transcript is saved as clean markdown with proper formatting.
 
+#### Diarized Transcript (Optional)
+When speaker diarization is enabled, the transcript includes speaker labels and timestamps:
+
+```markdown
+**[00:00:00 - SPEAKER_00]** Hello everyone, welcome to today's meeting.
+**[00:00:05 - SPEAKER_01]** Thank you for the introduction.
+```
+
+#### Summary
 The generated markdown summary includes:
 
 - **Key Points**: Most important decisions and highlights
@@ -161,21 +195,27 @@ The generated markdown summary includes:
 Edit [`app.py`](app.py) to change configuration:
 
 ```python
-# Configuration constants (lines 30-36)
-VIDEO_DIR = "videos"              # Input directory
+# Configuration constants
+VIDEO_DIR = "/mnt/c/Users/danis/Videos"  # Input directory (Windows Videos folder in WSL)
 OUTPUT_DIR = "output"             # Output directory
-WHISPER_MODEL = "medium"           # Whisper model size (tiny, base, small, medium, large)
-OLLAMA_MODEL = "google/gemma-3-1b" # Ollama model name
+OLLAMA_MODEL = "qwen2.5:7b"       # Ollama model name
 CLEANUP_AUDIO = True              # Set False to keep intermediate audio files
+ENABLE_DIARIZATION = False        # Set True to enable speaker diarization
 ```
 
-### Available Whisper Models
+### Available Transcription Models
 
+#### Whisper Models (English)
 - `tiny` - Fastest, lowest accuracy
 - `base` - Fast, decent accuracy
-- `medium` - Balanced speed/accuracy (default)
-- `medium` - Slower, higher accuracy
-- `large` - Slowest, highest accuracy
+- `small` - Balanced speed/accuracy
+- `medium` - Good accuracy, moderate speed (default)
+- `large` - Highest accuracy, slowest
+
+#### Whisper-Hinglish Model
+- Specialized for Hindi-English code-switching (Hinglish)
+- Outputs text in Latin script
+- Optimized for Indian English accents
 
 ### Alternative Ollama Models
 
@@ -183,9 +223,10 @@ You can use other models available in Ollama:
 
 ```bash
 # Try different models
+ollama pull qwen2.5:7b    # Current default
 ollama pull llama2
-ollama pull codellama
 ollama pull mistral
+ollama pull gemma2:2b
 
 # Then update the model name in app.py
 OLLAMA_MODEL = "llama2"
@@ -232,14 +273,21 @@ cp your_meeting.mp4 videos/
 ### "Summary generation failed"
 - Verify Ollama is running: `ollama list`
 - Check if the model is available: `ollama ps`
-- Try pulling the model again: `ollama pull google/gemma-3-1b`
+- Try pulling the model again: `ollama pull qwen2.5:7b`
+
+### "Diarization failed"
+- Check Hugging Face token is set: `echo $HF_TOKEN`
+- Verify pyannote dependencies are installed
+- System will automatically fall back to regular transcription
+- See [`DIARIZATION_README.md`](DIARIZATION_README.md) for detailed troubleshooting
 
 ## Performance Notes
 
 - **Whisper Medium Model**: Processes ~1 minute of audio per second (CPU)
 - **Audio Extraction**: Nearly instantaneous with ffmpeg
+- **Speaker Diarization**: Adds 2-5 minutes (depending on audio length)
 - **Summary Generation**: Depends on transcription length and model speed
-- **Total Processing Time**: Approximately 1-2x real-time (e.g., 30min meeting = 30-60min processing)
+- **Total Processing Time**: Approximately 1-2x real-time without diarization, 2-3x with diarization
 
 For faster processing, use `tiny` or `base` Whisper models. For better accuracy, use `medium` or `large`.
 
@@ -281,14 +329,27 @@ The modular architecture makes it easy to extend:
 
 - **Add new audio formats**: Modify [`src/video_processor.py`](src/video_processor.py)
 - **Change transcription model**: Modify [`src/transcriber.py`](src/transcriber.py)
+- **Customize diarization**: Modify [`src/diarizer.py`](src/diarizer.py)
 - **Customize summary format**: Modify [`src/summarizer.py`](src/summarizer.py)
 - **Add new utilities**: Extend [`src/utils.py`](src/utils.py)
 
 ## Dependencies
 
+### Core Dependencies
 - **openai-whisper** (20231117): Speech-to-text transcription
 - **ollama** (0.1.7): Local LLM inference
-- **moviepy** (1.0.3): Video processing (currently not used, reserved for future features)
+- **moviepy** (1.0.3): Video processing
+- **torch** (>=2.0.0): Deep learning framework
+- **transformers** (>=4.30.0): Hugging Face models
+- **accelerate** (>=0.20.0): Model acceleration
+
+### Optional: Speaker Diarization
+- **pyannote.audio**: Speaker diarization pipeline
+- **pyannote.core**: Core pyannote utilities
+- **pyannote.database**: Database utilities
+- **pyannote.metrics**: Evaluation metrics
+- **librosa** (>=0.9.0): Audio processing
+- **soundfile** (>=0.10.0): Audio file I/O
 
 ## License
 
@@ -307,8 +368,15 @@ For issues or questions:
 
 ## Version History
 
+- **v2.0.0** (2025-12-16): Speaker Diarization Update
+  - Added optional speaker diarization feature
+  - Support for Whisper-Hinglish model
+  - Enhanced markdown output with speaker labels
+  - Improved GPU memory management
+  - Updated default Ollama model to qwen2.5:7b
+
 - **v1.0.0** (2025-12-15): Initial release
   - MP4 to audio extraction
   - Whisper transcription
-  - Ollama/Gemma summarization
+  - Ollama summarization
   - Markdown output format

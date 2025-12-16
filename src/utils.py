@@ -133,6 +133,12 @@ def check_dependencies() -> bool:
     transformers_available = False
     accelerate_available = False
 
+    # Diarization backend availability
+    pyannote_audio_available = False
+    pyannote_core_available = False
+    librosa_available = False
+    soundfile_available = False
+
     # Check for ffmpeg (required for both backends)
     try:
         result = subprocess.run(
@@ -182,6 +188,42 @@ def check_dependencies() -> bool:
     except ImportError:
         logging.warning("❌ Accelerate library not found")
 
+    # Check for Pyannote Audio
+    try:
+        import pyannote.audio
+
+        logging.info("✅ Pyannote Audio library is available")
+        pyannote_audio_available = True
+    except ImportError:
+        logging.warning("❌ Pyannote Audio library not found")
+
+    # Check for Pyannote Core
+    try:
+        import pyannote.core
+
+        logging.info("✅ Pyannote Core library is available")
+        pyannote_core_available = True
+    except ImportError:
+        logging.warning("❌ Pyannote Core library not found")
+
+    # Check for Librosa
+    try:
+        import librosa
+
+        logging.info("✅ Librosa library is available")
+        librosa_available = True
+    except ImportError:
+        logging.warning("❌ Librosa library not found")
+
+    # Check for SoundFile
+    try:
+        import soundfile
+
+        logging.info("✅ SoundFile library is available")
+        soundfile_available = True
+    except ImportError:
+        logging.warning("❌ SoundFile library not found")
+
     # Check for Ollama (required for summarization)
     try:
         import ollama
@@ -214,11 +256,28 @@ def check_dependencies() -> bool:
         and accelerate_available
     )
 
+    # Check if diarization backend is available
+    diarization_backend_available = (
+        ffmpeg_available
+        and pytorch_available
+        and pyannote_audio_available
+        and pyannote_core_available
+        and librosa_available
+        and soundfile_available
+    )
+
     if not whisper_backend_available and not huggingface_backend_available:
         logging.error("❌ No transcription backend available!")
         logging.error("Install Whisper dependencies OR Hugging Face dependencies")
         logging.error("ffmpeg is required for both backends")
         return False
+
+    # Log diarization backend availability
+    if diarization_backend_available:
+        logging.info("✅ Speaker diarization backend available")
+    else:
+        logging.warning("⚠️  Speaker diarization backend not fully available")
+        logging.warning("   Install: pyannote.audio, pyannote.core, librosa, soundfile")
 
     # Check required core dependencies
     if not ollama_available:
