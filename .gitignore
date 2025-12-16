@@ -46,3 +46,19 @@ transcript/*.md
 
 # OS
 Thumbs.db
+
+# Secrets and sensitive files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+auth/
+token*
+secret*
+# Documentation with potential secrets
+*_FIX_INSTRUCTIONS.md
+*_SETUP.md
+*_SECRETS.md
