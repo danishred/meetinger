@@ -281,25 +281,26 @@ def main():
         console.print(f"🎬 [cyan]Processing:[/cyan] {video_path.name}")
         logging.info(f"Processing: {video_path.name}")
     else:
-        # Fall back to current implementation - ask user for file
-        console.print("[cyan]Enter the path to the video file:[/cyan]")
-        video_path_str = input("> ").strip()
+        # Fall back to Windows Videos folder - get most recent video
+        console.print(
+            "[yellow]📂 No video found in input folder. Checking Windows Videos folder...[/yellow]"
+        )
+        logging.info(f"Checking Windows Videos folder: {VIDEO_DIR}")
+        video_path = get_most_recent_video(VIDEO_DIR)
 
-        if not video_path_str:
-            console.print("[yellow]No path provided. Exiting.[/yellow]")
-            return 0
-
-        video_path = Path(video_path_str)
-
-        if not video_path.exists():
-            console.print(f"[red]❌ File not found: {video_path}[/red]")
+        if not video_path:
+            console.print(
+                f"❌ [red]No video files found in {VIDEO_DIR} directory![/red]"
+            )
+            logging.error(f"No video files found in {VIDEO_DIR} directory")
+            logging.info(
+                f"Please place your video meeting recording in the {VIDEO_DIR} folder"
+            )
             return 1
 
-        if not video_path.is_file():
-            console.print(f"[red]❌ Path is not a file: {video_path}[/red]")
-            return 1
-
-        console.print(f"🎬 [cyan]Processing:[/cyan] {video_path.name}")
+        console.print(
+            f"✅ [green]Video loaded successfully from Windows Videos folder![/green] {video_path.name}"
+        )
         logging.info(f"Processing: {video_path.name}")
 
     # Check file size and warn if large
