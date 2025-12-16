@@ -8,7 +8,13 @@ Workflow: MP4 → Audio Extraction → Transcription → Summary Generation → 
 
 import sys
 import logging
+import time
 from pathlib import Path
+
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich import box
 
 # Add src directory to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -23,6 +29,124 @@ from utils import (
 from video_processor import extract_audio_from_video, cleanup_audio_file
 from transcriber import Transcriber, WhisperHinglishTranscriber
 from summarizer import Summarizer
+
+# Initialize Rich console and timing tracker
+console = Console()
+timing_data = {
+    "video_extraction": 0,
+    "stt_transcription": 0,
+    "llm_summarization": 0,
+    "total": 0,
+}
+
+
+def play_completion_sound():
+    """Play a sound notification when processing is complete"""
+    try:
+        import os
+
+        if os.name == "nt":  # Windows
+            import winsound
+
+            winsound.MessageBeep(winsound.MB_OK)
+        else:  # Linux/Mac
+            # Bell character - most terminals will make a beep sound
+            print("\a")
+
+        console.print("🔔 [dim]Completion sound played[/dim]")
+    except Exception as e:
+        # If sound fails, just continue silently
+        console.print(f"[dim]Note: Could not play sound ({e})[/dim]")
+
+
+def format_duration(seconds):
+    """Format duration in seconds to human-readable format"""
+    if seconds < 60:
+        return f"{seconds:.2f}s"
+    else:
+        minutes = int(seconds // 60)
+        remaining_seconds = seconds % 60
+        return f"{minutes}:{remaining_seconds:05.2f}"
+
+
+def display_summary(timing_data, video_path, transcript_path, summary_path):
+    """Display beautiful summary with Rich"""
+
+    console.print("\n")
+    console.print(
+        Panel.fit(
+            "🎬 [bold cyan]Meeting Processing Complete![/bold cyan] 🎬", style="cyan"
+        )
+    )
+    console.print("\n")
+
+    # Timing Table
+    table = Table(title="⏱️ Processing Times", box=box.ROUNDED)
+    table.add_column("Step", style="cyan", no_wrap=True)
+    table.add_column("Duration", style="magenta", justify="right")
+    table.add_column("Percentage", style="green", justify="right")
+
+    total_time = timing_data["total"]
+
+    for step, duration in timing_data.items():
+        if step != "total" and duration > 0:
+            percentage = (duration / total_time) * 100
+            table.add_row(
+                step.replace("_", " ").title(),
+                f"{format_duration(duration)}",
+                f"{percentage:.1f}%",
+            )
+
+    table.add_row("", "", "")
+    table.add_row(
+        "[bold]Total Time[/bold]", f"[bold]{format_duration(total_time)}[/bold]", "100%"
+    )
+
+    console.print(table)
+    console.print("\n")
+
+    # File Locations
+    file_table = Table(title="📁 Output Files", box=box.SIMPLE)
+    file_table.add_column("Type", style="blue")
+    file_table.add_column("Location", style="white")
+
+    file_table.add_row("Video", str(video_path))
+    file_table.add_row("Transcript", f"[green]{transcript_path}[/green]")
+    file_table.add_row("Summary", f"[green]{summary_path}[/green]")
+
+    console.print(file_table)
+    console.print("\n")
+
+    # Performance Insights
+    insights = []
+    if timing_data["stt_transcription"] > 0:
+        insights.append(
+            f"• STT Model: {format_duration(timing_data['stt_transcription'])}"
+        )
+    if timing_data["llm_summarization"] > 0:
+        insights.append(
+            f"• LLM Summary: {format_duration(timing_data['llm_summarization'])}"
+        )
+    if timing_data["video_extraction"] > 0:
+        insights.append(
+            f"• Audio Extraction: {format_duration(timing_data['video_extraction'])}"
+        )
+
+    if insights:
+        console.print(
+            Panel(
+                "\n".join(insights),
+                title="📊 Performance Metrics",
+                border_style="yellow",
+            )
+        )
+
+    console.print(
+        "\n✅ [bold green]All done! Check your transcript and summary files.[/bold green]\n"
+    )
+
+    # Play completion sound
+    play_completion_sound()
 
 
 def main():
@@ -59,34 +183,53 @@ def main():
         if not model_size:
             model_size = "medium"
         transcriber = Transcriber(model_size=model_size)
+        model_name = f"Whisper ({model_size})"
     elif choice == "2":
         # New Hinglish model
         transcriber = WhisperHinglishTranscriber()
+        model_name = "Whisper-Hinglish"
     else:
         print("Invalid choice. Defaulting to Whisper (medium)")
         transcriber = Transcriber(model_size="medium")
+        model_name = "Whisper (medium)"
+
+    console.print(f"🤖 [blue]Selected Model:[/blue] {model_name}")
 
     print("=" * 60)
 
     # Step 1: Check dependencies
     logging.info("\n[Step 1/6] Checking dependencies...")
+    console.print("🔍 [blue]Checking dependencies...[/blue]")
     if not check_dependencies():
+        console.print("❌ [red]Dependency check failed![/red]")
         logging.error("Dependency check failed. Please install required dependencies.")
         logging.info("Run: pip install -r requirements.txt")
         logging.info("Also ensure ffmpeg is installed and Ollama is running")
         return 1
+    console.print("✅ [green]All dependencies satisfied![/green]")
 
     # Step 2: Get most recent video file
     logging.info("\n[Step 2/6] Finding most recent video file...")
+    console.print("🎥 [blue]Finding most recent video file...[/blue]")
     video_path = get_most_recent_video(VIDEO_DIR)
     if not video_path:
+        console.print(f"❌ [red]No video files found in {VIDEO_DIR} directory![/red]")
         logging.error(f"No video files found in {VIDEO_DIR} directory")
         logging.info(
             f"Please place your video meeting recording in the {VIDEO_DIR} folder"
         )
         return 1
 
+    console.print(f"✅ [green]Video loaded successfully![/green] {video_path.name}")
     logging.info(f"Processing: {video_path.name}")
+
+    # Check file size and warn if large
+    video_size_mb = video_path.stat().st_size / (1024 * 1024)
+    if video_size_mb > 100:
+        console.print(
+            f"⚠️ [yellow]Warning: Large video file detected ({video_size_mb:.1f} MB)[/yellow]"
+        )
+        console.print(f"   [dim]Processing may take longer than usual.[/dim]")
 
     # Step 3: Ensure output directory exists
     logging.info("\n[Step 3/6] Preparing output directory...")
@@ -96,32 +239,50 @@ def main():
 
     # Step 4: Extract audio from video
     logging.info("\n[Step 4/6] Extracting audio from video...")
+    console.print("🎵 [blue]Extracting audio from video...[/blue]")
+    start_time = time.time()
     audio_path = extract_audio_from_video(video_path, OUTPUT_DIR)
+    timing_data["video_extraction"] = time.time() - start_time
     if not audio_path:
         logging.error("Failed to extract audio from video")
         return 1
+    console.print(
+        f"✅ [green]Audio extracted in {timing_data['video_extraction']:.2f}s[/green]"
+    )
 
     # Step 5: Transcribe audio
     logging.info("\n[Step 5/6] Transcribing audio...")
 
     # Load the selected model with timeout handling
+    console.print(f"📦 [blue]Loading {type(transcriber).__name__}...[/blue]")
     logging.info(f"Loading {type(transcriber).__name__}...")
     if not transcriber.load_model():
+        console.print(f"❌ [red]Failed to load {type(transcriber).__name__}![/red]")
         logging.error(f"Failed to load {type(transcriber).__name__}")
         if CLEANUP_AUDIO:
             cleanup_audio_file(audio_path)
         return 1
+    console.print(
+        f"✅ [green]{type(transcriber).__name__} loaded successfully![/green]"
+    )
 
     # Get video base name for transcript file
     video_base_name = video_path.stem
 
     # Transcribe audio and save to transcript folder
-    transcription = transcriber.transcribe_audio(audio_path, video_base_name)
+    with console.status("[bold green]Transcribing audio...[/bold green]") as status:
+        start_time = time.time()
+        transcription = transcriber.transcribe_audio(audio_path, video_base_name)
+        stt_time = time.time() - start_time
+        timing_data["stt_transcription"] = stt_time
+
     if not transcription:
         logging.error("Failed to transcribe audio")
         if CLEANUP_AUDIO:
             cleanup_audio_file(audio_path)
         return 1
+
+    console.print(f"✅ [green]Transcription completed in {stt_time:.2f}s[/green]")
 
     logging.info("Transcription preview (first 200 chars):")
     logging.info(f"  {transcription[:200]}...")
@@ -135,24 +296,41 @@ def main():
     summarizer = Summarizer(model_name=OLLAMA_MODEL)
 
     # Check if model is available, pull if not
+    console.print(f"🤖 [blue]Checking for LLM model: {OLLAMA_MODEL}[/blue]")
     if not summarizer.check_model_available():
+        console.print(
+            f"📥 [yellow]Model '{OLLAMA_MODEL}' not found. Attempting to pull...[/yellow]"
+        )
         logging.info(f"Model '{OLLAMA_MODEL}' not found. Attempting to pull...")
         if not summarizer.pull_model():
+            console.print(f"❌ [red]Failed to pull model '{OLLAMA_MODEL}'![/red]")
             logging.error(f"Failed to pull model '{OLLAMA_MODEL}'")
             logging.info(
                 f"Please ensure Ollama is running and the model name is correct"
             )
             return 1
+        console.print(f"✅ [green]Model '{OLLAMA_MODEL}' pulled successfully![/green]")
+    else:
+        console.print(f"✅ [green]Model '{OLLAMA_MODEL}' is available![/green]")
 
     # Generate summary from transcript file
     meeting_title = video_path.stem.replace("_", " ").replace("-", " ")
     transcript_path = Path("transcript") / f"{video_base_name}_transcript.md"
 
     logging.info(f"Reading transcript from: {transcript_path}")
-    summary = summarizer.generate_summary(transcript_path, meeting_title)
+    with console.status(
+        "[bold green]Generating summary with LLM...[/bold green]"
+    ) as status:
+        start_time = time.time()
+        summary = summarizer.generate_summary(transcript_path, meeting_title)
+        llm_time = time.time() - start_time
+        timing_data["llm_summarization"] = llm_time
+
     if not summary:
         logging.error("Failed to generate summary")
         return 1
+
+    console.print(f"✅ [green]Summary generated in {llm_time:.2f}s[/green]")
 
     # Save summary to file
     summary_path = construct_output_path(video_path, OUTPUT_DIR, ".md")
@@ -160,24 +338,11 @@ def main():
         logging.error("Failed to save summary")
         return 1
 
-    # Success!
-    logging.info("\n" + "=" * 60)
-    logging.info("SUCCESS! Meeting summary generated")
-    logging.info("=" * 60)
-    logging.info(f"Input video:    {video_path.name}")
-    logging.info(f"Transcript:     {transcript_path.name}")
-    logging.info(f"Output file:    {summary_path.name}")
-    logging.info(f"Summary location: {summary_path}")
-    logging.info(f"Transcript location: {transcript_path}")
-    logging.info("=" * 60)
+    # Calculate total time
+    timing_data["total"] = sum([v for k, v in timing_data.items() if k != "total"])
 
-    # Show summary preview
-    logging.info("\nSummary preview (first 500 chars):")
-    logging.info("-" * 60)
-    logging.info(summary[:500])
-    if len(summary) > 500:
-        logging.info("...")
-    logging.info("-" * 60)
+    # Display beautiful summary
+    display_summary(timing_data, video_path, transcript_path, summary_path)
 
     return 0
 
