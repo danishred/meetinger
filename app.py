@@ -21,7 +21,7 @@ from utils import (
     check_dependencies,
 )
 from video_processor import extract_audio_from_video, cleanup_audio_file
-from transcriber import Transcriber
+from transcriber import Transcriber, WhisperHinglishTranscriber
 from summarizer import Summarizer
 
 
@@ -36,9 +36,37 @@ def main():
     # Configuration
     VIDEO_DIR = "/mnt/c/Users/danis/Videos"  # Windows Videos folder in WSL
     OUTPUT_DIR = "output"
-    WHISPER_MODEL = "medium"
     OLLAMA_MODEL = "qwen2.5:7b"
     CLEANUP_AUDIO = True  # Set to False to keep intermediate audio files
+
+    # Model selection
+    print("\n" + "=" * 60)
+    print("Choose STT Model:")
+    print("=" * 60)
+    print("1. Whisper (OpenAI) - Multi-language, general purpose")
+    print(
+        "2. Whisper-Hinglish (Oriserve) - Specialized for Hinglish (Latin script output)"
+    )
+    print("=" * 60)
+
+    choice = input("Enter choice (1 or 2): ").strip()
+
+    if choice == "1":
+        # Existing Whisper model
+        model_size = input(
+            "Enter Whisper model size (tiny, base, small, medium, large) [medium]: "
+        ).strip()
+        if not model_size:
+            model_size = "medium"
+        transcriber = Transcriber(model_size=model_size)
+    elif choice == "2":
+        # New Hinglish model
+        transcriber = WhisperHinglishTranscriber()
+    else:
+        print("Invalid choice. Defaulting to Whisper (medium)")
+        transcriber = Transcriber(model_size="medium")
+
+    print("=" * 60)
 
     # Step 1: Check dependencies
     logging.info("\n[Step 1/6] Checking dependencies...")
@@ -75,10 +103,11 @@ def main():
 
     # Step 5: Transcribe audio
     logging.info("\n[Step 5/6] Transcribing audio...")
-    transcriber = Transcriber(model_size=WHISPER_MODEL)
 
+    # Load the selected model with timeout handling
+    logging.info(f"Loading {type(transcriber).__name__}...")
     if not transcriber.load_model():
-        logging.error("Failed to load Whisper model")
+        logging.error(f"Failed to load {type(transcriber).__name__}")
         if CLEANUP_AUDIO:
             cleanup_audio_file(audio_path)
         return 1

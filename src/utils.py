@@ -43,8 +43,17 @@ def get_most_recent_video(video_dir: str) -> Optional[Path]:
         return None
 
     # Supported video file extensions
-    video_extensions = ["*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm", "*.flv", "*.wmv", "*.m4v"]
-    
+    video_extensions = [
+        "*.mp4",
+        "*.avi",
+        "*.mov",
+        "*.mkv",
+        "*.webm",
+        "*.flv",
+        "*.wmv",
+        "*.m4v",
+    ]
+
     # Find all video files
     video_files = []
     for ext in video_extensions:
@@ -52,7 +61,9 @@ def get_most_recent_video(video_dir: str) -> Optional[Path]:
 
     if not video_files:
         logging.warning(f"No video files found in {video_dir}")
-        logging.warning(f"Supported formats: {', '.join([ext[2:] for ext in video_extensions])}")
+        logging.warning(
+            f"Supported formats: {', '.join([ext[2:] for ext in video_extensions])}"
+        )
         return None
 
     # Sort by modification time and return the most recent
@@ -104,59 +115,125 @@ def construct_output_path(
 def check_dependencies() -> bool:
     """
     Check if required dependencies are available.
+    Supports both Whisper and Hugging Face backends for transcription.
 
     Returns:
-        True if all dependencies are available, False otherwise
+        True if at least one transcription backend is available, False otherwise
     """
-    dependencies_ok = True
+    import subprocess
 
-    # Check for ffmpeg
+    # Core dependencies (required for all backends)
+    ffmpeg_available = False
+    ollama_available = False
+    moviepy_available = False
+
+    # Transcription backend availability
+    whisper_available = False
+    pytorch_available = False
+    transformers_available = False
+    accelerate_available = False
+
+    # Check for ffmpeg (required for both backends)
     try:
-        import subprocess
-
         result = subprocess.run(
             ["ffmpeg", "-version"], capture_output=True, text=True, timeout=5
         )
         if result.returncode != 0:
-            logging.error("ffmpeg is not installed or not working properly")
-            dependencies_ok = False
+            logging.error("❌ ffmpeg is not installed or not working properly")
         else:
-            logging.info("ffmpeg is available")
+            logging.info("✅ ffmpeg is available")
+            ffmpeg_available = True
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logging.error(f"ffmpeg not found: {e}")
-        dependencies_ok = False
+        logging.error(f"❌ ffmpeg not found: {e}")
 
     # Check for Whisper
     try:
         import whisper
 
-        logging.info("Whisper is available")
-    except ImportError as e:
-        logging.error(f"Whisper not installed: {e}")
-        dependencies_ok = False
+        logging.info("✅ Whisper library is available")
+        whisper_available = True
+    except ImportError:
+        logging.warning("❌ Whisper library not found")
 
-    # Check for Ollama
+    # Check for PyTorch
+    try:
+        import torch
+
+        logging.info("✅ PyTorch library is available")
+        pytorch_available = True
+    except ImportError:
+        logging.warning("❌ PyTorch library not found")
+
+    # Check for Transformers
+    try:
+        import transformers
+
+        logging.info("✅ Transformers library is available")
+        transformers_available = True
+    except ImportError:
+        logging.warning("❌ Transformers library not found")
+
+    # Check for Accelerate
+    try:
+        import accelerate
+
+        logging.info("✅ Accelerate library is available")
+        accelerate_available = True
+    except ImportError:
+        logging.warning("❌ Accelerate library not found")
+
+    # Check for Ollama (required for summarization)
     try:
         import ollama
 
         # Try to connect to Ollama server
         try:
             ollama.list()
-            logging.info("Ollama is available and server is running")
+            logging.info("✅ Ollama is available and server is running")
+            ollama_available = True
         except Exception as e:
-            logging.error(f"Ollama server not accessible: {e}")
-            dependencies_ok = False
-    except ImportError as e:
-        logging.error(f"Ollama not installed: {e}")
-        dependencies_ok = False
+            logging.error(f"❌ Ollama server not accessible: {e}")
+    except ImportError:
+        logging.error("❌ Ollama not installed")
 
-    # Check for moviepy
+    # Check for moviepy (required for video processing)
     try:
         import moviepy
 
-        logging.info("MoviePy is available")
-    except ImportError as e:
-        logging.error(f"MoviePy not installed: {e}")
-        dependencies_ok = False
+        logging.info("✅ MoviePy is available")
+        moviepy_available = True
+    except ImportError:
+        logging.error("❌ MoviePy not installed")
 
-    return dependencies_ok
+    # Check if at least one transcription backend is available
+    whisper_backend_available = ffmpeg_available and whisper_available
+    huggingface_backend_available = (
+        ffmpeg_available
+        and pytorch_available
+        and transformers_available
+        and accelerate_available
+    )
+
+    if not whisper_backend_available and not huggingface_backend_available:
+        logging.error("❌ No transcription backend available!")
+        logging.error("Install Whisper dependencies OR Hugging Face dependencies")
+        logging.error("ffmpeg is required for both backends")
+        return False
+
+    # Check required core dependencies
+    if not ollama_available:
+        logging.error("❌ Ollama is required for summarization")
+        return False
+
+    if not moviepy_available:
+        logging.error("❌ MoviePy is required for video processing")
+        return False
+
+    # Log which backends are available
+    if whisper_backend_available:
+        logging.info("✅ Whisper backend available")
+    if huggingface_backend_available:
+        logging.info("✅ Hugging Face backend available")
+
+    logging.info("✅ All required dependencies are available")
+    return True
