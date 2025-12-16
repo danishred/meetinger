@@ -242,22 +242,26 @@ class WhisperHinglishTranscriber:
             # Load processor
             processor = AutoProcessor.from_pretrained(self.model_id)
 
-            # Create pipeline for transcription
+            # Create pipeline for transcription with memory optimization for 4GB VRAM
             self.model = pipeline(
                 "automatic-speech-recognition",
                 model=model,
                 tokenizer=processor.tokenizer,
                 feature_extractor=processor.feature_extractor,
                 max_new_tokens=128,
-                chunk_length_s=30,
-                batch_size=16,
-                dtype=self.torch_dtype,  # Use dtype instead of torch_dtype
+                chunk_length_s=10,  # Reduced from 30 to 10 for less memory
+                batch_size=4,  # Reduced from 16 to 4 for 4GB VRAM
+                dtype=self.torch_dtype,
                 device=self.device,
-                ignore_warning=True,  # Suppress chunking warning
+                ignore_warning=True,
             )
 
             # Fix for batching: set pad_token_id for tokenizer
             self.model.tokenizer.pad_token_id = model.config.eos_token_id
+
+            # Clear CUDA cache after loading
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             logging.info(
                 f"Whisper Hinglish model '{self.model_id}' loaded successfully"
@@ -363,6 +367,9 @@ class WhisperHinglishTranscriber:
 
             if not transcription:
                 logging.warning("Transcription returned empty text")
+                # Clear CUDA cache on empty result
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 return None
 
             logging.info(f"Transcribed text length: {len(transcription)} characters")
@@ -378,9 +385,16 @@ class WhisperHinglishTranscriber:
                 else:
                     logging.warning("Failed to save Hinglish transcript to file")
 
+            # Clear CUDA cache after successful transcription
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             return transcription
 
         except Exception as e:
+            # Clear CUDA cache on error
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             logging.error(f"Hinglish transcription failed: {e}")
             return None
 
@@ -411,8 +425,15 @@ class WhisperHinglishTranscriber:
                 return_timestamps=True,  # Include timestamps
             )
 
+            # Clear CUDA cache after transcription
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             return result
 
         except Exception as e:
+            # Clear CUDA cache on error
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             logging.error(f"Hinglish transcription with timestamps failed: {e}")
             return None
