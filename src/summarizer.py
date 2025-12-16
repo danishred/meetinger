@@ -132,38 +132,80 @@ class Summarizer:
         """
         title_section = f"Meeting: {meeting_title}\n\n" if meeting_title else ""
 
-        prompt = f"""You are an expert at summarizing meeting transcripts. Analyze the following meeting transcription and create a comprehensive markdown summary.
+        prompt = f"""You are an expert at summarizing meeting transcripts. Analyze the following meeting transcription and create a comprehensive markdown summary following a specific format.
 
 {title_section}Meeting Transcription:
 {transcription}
 
 Please provide a detailed markdown summary with the following structure:
 
-# Meeting Summary
+[Meeting Title - use provided title or extract from transcript]
+VIEW RECORDING:
+Meeting Purpose
 
-## Key Points
-- List the 5-7 most important decisions, action items, or key points discussed
+[Brief statement of meeting goals and objectives]
 
-## Action Items
-- [ ] Specific task 1 (assignee if mentioned)
-- [ ] Specific task 2 (assignee if mentioned)
-- [ ] etc.
+Key Takeaways
 
-## Discussion Topics
-Brief overview of main topics covered
+  - [4-7 bullet points of most critical decisions, information, or outcomes]
+  - Focus on actionable items and important decisions
+  - Include specific names, dates, and commitments
+  - Highlight blockers, solutions, and strategic decisions
 
-## Decisions Made
-- Decision 1
-- Decision 2
-- etc.
+Topics
 
-## Next Steps
-What are the follow-up actions or next meeting topics?
+[Main Topic 1 - use descriptive heading]
 
-## Attendees (if mentioned)
-- Names and roles if mentioned in the transcription
+  - [Detailed description of the topic]
+  - [Subtopic with specific details]
+      - [Nested details with proper indentation]
+      - [Include names, decisions, and specific information]
+  - [Impact or implications]
 
-Focus on clarity, actionability, and capturing the essential information. Use proper markdown formatting with headers, bullet points, and checkboxes for action items."""
+[Main Topic 2 - use descriptive heading]
+
+  - [Detailed description]
+  - [Subtopic]
+      - [Nested details]
+  - [Action items or decisions related to this topic]
+
+[Continue for all major topics...]
+
+Other Updates
+
+  - [Miscellaneous items not covered in main topics]
+  - [Status updates on ongoing work]
+  - [Low-priority items or future tasks]
+
+Next Steps
+
+  - [Assignee Name]:
+      - [Specific action item 1]
+      - [Specific action item 2]
+  - [Assignee Name]:
+      - [Specific action item]
+  - [Organize by person responsible]
+
+Your Questions
+
+[List of questions asked by the meeting participants, one per line in quotes]
+
+Their Questions
+
+[List of questions asked by others in the meeting, one per line in quotes]
+
+CRITICAL INSTRUCTIONS:
+1. Extract specific details, names, decisions, and action items from the transcription
+2. Organize information hierarchically with proper indentation (2 spaces per level)
+3. Identify who is responsible for each action item and list under their name in Next Steps
+4. Separate questions into "Your Questions" and "Their Questions" sections
+5. Use clear, professional language throughout
+6. Focus on actionable information and decisions rather than general discussion
+7. Include specific details like model names, platform names, technical issues, and solutions
+8. Capture commitments, deadlines, and responsibilities accurately
+9. For each major discussion topic, create a dedicated section under Topics with detailed breakdown
+10. Maintain the exact section order and formatting style shown above
+11. Use proper markdown formatting with headers, bullet points, and consistent indentation"""
 
         return prompt
 
