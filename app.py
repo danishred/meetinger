@@ -9,7 +9,9 @@ Workflow: MP4 → Audio Extraction → VAD Processing → Transcription → Summ
 import sys
 import logging
 import time
+import threading
 from pathlib import Path
+from typing import Optional
 
 from rich.console import Console
 from rich.table import Table
@@ -130,6 +132,109 @@ def format_duration(seconds):
         return f"{minutes}:{remaining_seconds:05.2f}"
 
 
+class CountdownInput:
+    """Handles countdown timer for model selection with automatic fallback"""
+
+    def __init__(self, timeout_seconds: int = 10):
+        self.timeout_seconds = timeout_seconds
+        self.user_input = None
+        self.input_received = threading.Event()
+        self.countdown_thread = None
+        self.input_thread = None
+        logging.debug(f"CountdownInput initialized with timeout: {timeout_seconds}s")
+
+    def _countdown_timer(self):
+        """Display countdown and auto-select if no input received"""
+        logging.debug(f"Countdown thread started, timeout: {self.timeout_seconds}s")
+        try:
+            for i in range(self.timeout_seconds, 0, -1):
+                if self.input_received.is_set():
+                    logging.debug("Countdown thread: Input received, exiting early")
+                    return
+                print(
+                    f"\r⏳ Auto-selecting in {i} seconds... Press Enter to choose now: ",
+                    end="",
+                    flush=True,
+                )
+                time.sleep(1)
+
+            if not self.input_received.is_set():
+                logging.debug("Countdown thread: Time's up, auto-selecting option 1")
+                print(
+                    f"\r⏰ Time's up! Auto-selecting first option (Whisper-Hinglish)..."
+                )
+                self.user_input = "1"  # Auto-select first option
+                self.input_received.set()
+                logging.debug("Countdown thread: Auto-selection completed")
+        except Exception as e:
+            logging.error(f"Countdown thread error: {e}")
+        finally:
+            logging.debug("Countdown thread: Exiting")
+
+    def _input_reader(self):
+        """Read user input in a separate thread"""
+        try:
+            logging.debug("_input_reader: Waiting for user input...")
+            user_choice = input().strip()
+            logging.debug(f"_input_reader: User input received: '{user_choice}'")
+            self.user_input = user_choice
+            self.input_received.set()
+            logging.debug("_input_reader: Input event set")
+        except (EOFError, KeyboardInterrupt) as e:
+            logging.debug(f"_input_reader: Input exception caught: {e}")
+            # If input fails, auto-select first option
+            if not self.input_received.is_set():
+                self.user_input = "1"
+                self.input_received.set()
+                logging.debug(
+                    "_input_reader: Auto-selected option 1 due to input exception"
+                )
+        except Exception as e:
+            logging.error(f"_input_reader error: {e}")
+        finally:
+            logging.debug("_input_reader: Exiting")
+
+    def get_input_with_countdown(self, prompt: str) -> str:
+        """
+        Get user input with a countdown timer.
+        Returns the user's choice or auto-selected choice after timeout.
+        """
+        logging.debug("get_input_with_countdown: Starting")
+        print(prompt)
+
+        # Start countdown in background
+        self.countdown_thread = threading.Thread(target=self._countdown_timer)
+        self.countdown_thread.daemon = True
+        self.countdown_thread.start()
+        logging.debug("get_input_with_countdown: Countdown thread started")
+
+        # Start input reader in background
+        self.input_thread = threading.Thread(target=self._input_reader)
+        self.input_thread.daemon = True
+        self.input_thread.start()
+        logging.debug("get_input_with_countdown: Input reader thread started")
+
+        # Wait for either input or timeout
+        logging.debug("get_input_with_countdown: Waiting for input or timeout...")
+        self.input_received.wait(timeout=self.timeout_seconds + 1)
+
+        # Ensure both threads are finished
+        logging.debug("get_input_with_countdown: Waiting for threads to finish...")
+        self.countdown_thread.join(timeout=0.1)
+        self.input_thread.join(timeout=0.1)
+
+        # Ensure we have a valid input
+        if self.user_input is None:
+            logging.debug("get_input_with_countdown: No input received, using default")
+            self.user_input = "1"
+            self.input_received.set()
+
+        logging.debug(
+            f"get_input_with_countdown: Returning user_input: '{self.user_input}'"
+        )
+        return self.user_input
+
+
 def display_summary(timing_data, video_path, transcript_path, summary_path):
     """Display beautiful summary with Rich"""
 
@@ -229,29 +334,39 @@ def main():
     OLLAMA_MODEL = "gemma2:9b-instruct-q4_K_M"
     CLEANUP_AUDIO = True  # Set to False to keep intermediate audio files
 
-    # Model selection
+    # Model selection with countdown
     print("\n" + "=" * 60)
     print("Choose STT Model:")
     print("=" * 60)
-    print("1. Whisper (OpenAI) - Multi-language, general purpose")
     print(
-        "2. Whisper-Hinglish (Oriserve) - Specialized for Hinglish (Latin script output)"
+        "1. Whisper-Hinglish (Oriserve) - Specialized for Hinglish (Latin script output)"
     )
+    print("2. Whisper (OpenAI) - Multi-language, general purpose")
     print("=" * 60)
 
     # Auto-select model for non-interactive environments
-    import sys
-
+    logging.debug("main: Starting model selection process")
     if sys.stdin.isatty():
-        # Interactive mode - prompt user
-        choice = input("Enter choice (1 or 2): ").strip()
+        # Interactive mode - prompt user with countdown
+        logging.debug("main: Interactive mode detected, creating countdown input")
+        countdown_input = CountdownInput(timeout_seconds=10)
+        choice = countdown_input.get_input_with_countdown("Enter choice (1 or 2): ")
+        logging.debug(f"main: Countdown completed, user choice: '{choice}'")
     else:
         # Non-interactive mode - auto-select
-        choice = "1"  # Default to Whisper
-        print("Auto-selecting Whisper model (non-interactive mode)")
+        choice = "1"  # Default to Whisper-Hinglish
+        logging.debug("main: Non-interactive mode, auto-selecting Whisper-Hinglish")
+        print("Auto-selecting Whisper-Hinglish model (non-interactive mode)")
 
+    logging.debug(f"main: Processing model selection with choice: '{choice}'")
     if choice == "1":
-        # Existing Whisper model
+        # Hinglish model (now first choice)
+        logging.debug("main: Initializing WhisperHinglishTranscriber")
+        transcriber = WhisperHinglishTranscriber()
+        model_name = "Whisper-Hinglish (Oriserve)"
+    elif choice == "2":
+        # Existing Whisper model (now second choice)
+        logging.debug("main: Initializing Whisper Transcriber")
         if sys.stdin.isatty():
             model_size = input(
                 "Enter Whisper model size (tiny, base, small, medium, large) [medium]: "
@@ -262,21 +377,20 @@ def main():
             model_size = "medium"
         transcriber = Transcriber(model_size=model_size)
         model_name = f"Whisper ({model_size})"
-    elif choice == "2":
-        # New Hinglish model
-        transcriber = WhisperHinglishTranscriber()
-        model_name = "Whisper-Hinglish"
     else:
-        print("Invalid choice. Defaulting to Whisper (medium)")
-        transcriber = Transcriber(model_size="medium")
-        model_name = "Whisper (medium)"
+        logging.debug("main: Invalid choice, defaulting to Whisper-Hinglish")
+        print("Invalid choice. Defaulting to Whisper-Hinglish (Oriserve)")
+        transcriber = WhisperHinglishTranscriber()
+        model_name = "Whisper-Hinglish (Oriserve)"
 
     console.print(f"🤖 [blue]Selected Model:[/blue] {model_name}")
+    logging.debug(f"main: Model selection completed, selected: {model_name}")
 
     print("=" * 60)
 
     # Step 1: Check dependencies
     logging.info("\n[Step 1/6] Checking dependencies...")
+    logging.debug("main: Starting dependency check")
     console.print("🔍 [blue]Checking dependencies...[/blue]")
     if not check_dependencies():
         console.print("❌ [red]Dependency check failed![/red]")
@@ -288,6 +402,7 @@ def main():
 
     # Step 2: Get video file from input folder or prompt user
     logging.info("\n[Step 2/6] Finding video file...")
+    logging.debug("main: Starting video file discovery")
     console.print("🎥 [blue]Finding video file...[/blue]")
 
     # Check for video in input folder
@@ -333,12 +448,14 @@ def main():
 
     # Step 3: Ensure output directory exists
     logging.info("\n[Step 3/7] Preparing output directory...")
+    logging.debug("main: Creating output directory")
     if not ensure_output_dir(OUTPUT_DIR):
         logging.error("Failed to create output directory")
         return 1
 
     # Step 4: Extract audio from video
     logging.info("\n[Step 4/7] Extracting audio from video...")
+    logging.debug("main: Starting audio extraction")
     console.print("🎵 [blue]Extracting audio from video...[/blue]")
     start_time = time.time()
     audio_path = extract_audio_from_video(video_path, OUTPUT_DIR)
@@ -349,11 +466,13 @@ def main():
     console.print(
         f"✅ [green]Audio extracted in {timing_data['video_extraction']:.2f}s[/green]"
     )
+    logging.debug(f"main: Audio extraction completed, path: {audio_path}")
 
     # Step 5: Process audio with VAD (if enabled)
     audio_to_transcribe = audio_path
     if USE_VAD:
         logging.info("\n[Step 5/7] Processing audio with Voice Activity Detection...")
+        logging.debug("main: Starting VAD processing")
         vad_processor = VADProcessor(aggressiveness=VAD_AGGRESSIVENESS)
 
         with console.status(
@@ -380,15 +499,21 @@ def main():
             console.print(
                 f"📊 [blue]Total speech duration: {total_speech_duration:.2f}s[/blue]"
             )
+            logging.debug(
+                f"main: VAD processing completed, filtered path: {filtered_audio_path}"
+            )
         else:
             console.print(
                 "⚠️ [yellow]VAD processing failed, using original audio[/yellow]"
             )
+            logging.debug("main: VAD processing failed, using original audio")
     else:
         logging.info("\n[Step 5/7] Skipping VAD processing...")
+        logging.debug("main: VAD processing skipped")
 
     # Step 6: Transcribe audio
     logging.info("\n[Step 6/7] Transcribing audio...")
+    logging.debug("main: Starting audio transcription")
 
     # Load the selected model with timeout handling
     console.print(f"📦 [blue]Loading {type(transcriber).__name__}...[/blue]")
@@ -404,11 +529,13 @@ def main():
     console.print(
         f"✅ [green]{type(transcriber).__name__} loaded successfully![/green]"
     )
+    logging.debug(f"main: {type(transcriber).__name__} loaded successfully")
 
     # Get video base name for transcript file
     video_base_name = video_path.stem
 
     # Transcribe audio and save to transcript folder
+    logging.debug(f"main: Starting transcription of {audio_to_transcribe}")
     with console.status("[bold green]Transcribing audio...[/bold green]") as status:
         start_time = time.time()
         # Convert string path to Path object if needed
@@ -430,6 +557,7 @@ def main():
         return 1
 
     console.print(f"✅ [green]Transcription completed in {stt_time:.2f}s[/green]")
+    logging.debug(f"main: Transcription completed, duration: {stt_time:.2f}s")
 
     logging.info("Transcription preview (first 200 chars):")
     logging.info(f"  {transcription[:200]}...")
@@ -440,6 +568,7 @@ def main():
 
     # Step 7: Generate summary
     logging.info("\n[Step 7/7] Generating meeting summary...")
+    logging.debug("main: Starting summary generation")
     summarizer = Summarizer(model_name=OLLAMA_MODEL)
 
     # Check if model is available, pull if not
@@ -478,6 +607,7 @@ def main():
         return 1
 
     console.print(f"✅ [green]Summary generated in {llm_time:.2f}s[/green]")
+    logging.debug(f"main: Summary generation completed, duration: {llm_time:.2f}s")
 
     # Save summary to file
     summary_path = construct_output_path(video_path, OUTPUT_DIR, ".md")
@@ -489,6 +619,7 @@ def main():
     timing_data["total"] = sum([v for k, v in timing_data.items() if k != "total"])
 
     # Display beautiful summary
+    logging.debug("main: Displaying final summary")
     display_summary(timing_data, video_path, transcript_path, summary_path)
 
     return 0
