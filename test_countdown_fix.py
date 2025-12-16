@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
 Test script to verify the CountdownInput fix works correctly.
+
+This test validates that the CountdownInput class properly handles:
+1. User input within timeout period
+2. Auto-selection when timeout expires
+3. Thread safety and resource cleanup
 """
 
 import sys
@@ -74,20 +79,59 @@ def test_user_input():
         return False
 
 
+def test_thread_safety():
+    """Test that CountdownInput is thread-safe"""
+    print("\nTesting thread safety...")
+
+    results = []
+
+    def run_countdown_test():
+        countdown = CountdownInput(timeout_seconds=1)
+        choice = countdown.get_input_with_countdown("Test: ")
+        results.append(choice)
+
+    # Run multiple countdowns concurrently
+    threads = []
+    for i in range(3):
+        thread = threading.Thread(target=run_countdown_test)
+        threads.append(thread)
+        thread.start()
+
+    # Wait for all threads to complete
+    for thread in threads:
+        thread.join()
+
+    # All should have auto-selected "1"
+    if all(choice == "1" for choice in results):
+        print("✅ Test PASSED: Thread safety verified")
+        return True
+    else:
+        print(f"❌ Test FAILED: Thread safety issue detected. Results: {results}")
+        return False
+
+
 if __name__ == "__main__":
-    print("=" * 60)
+    print("=" * 70)
     print("Testing CountdownInput Fix")
-    print("=" * 60)
+    print("=" * 70)
 
     # Test 1: Countdown timeout
     test1_passed = test_countdown_timeout()
 
     # Test 2: User input
     test2_passed = test_user_input()
+    
+    # Test 3: Thread safety
+    test3_passed = test_thread_safety()
 
-    print("\n" + "=" * 60)
-    if test1_passed and test2_passed:
-        print("🎉 ALL TESTS PASSED: The fix is working correctly!")
+    print("\n" + "=" * 70)
+    print("TEST SUMMARY:")
+    print(f"  Countdown Timeout: {'✅ PASSED' if test1_passed else '❌ FAILED'}")
+    print(f"  User Input:        {'✅ PASSED' if test2_passed else '❌ FAILED'}")
+    print(f"  Thread Safety:     {'✅ PASSED' if test3_passed else '❌ FAILED'}")
+    
+    if test1_passed and test2_passed and test3_passed:
+        print("\n🎉 ALL TESTS PASSED: The fix is working correctly!")
     else:
-        print("❌ SOME TESTS FAILED: The fix needs more work")
-    print("=" * 60)
+        print("\n❌ SOME TESTS FAILED: The fix needs more work")
+    print("=" * 70)
