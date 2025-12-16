@@ -203,9 +203,9 @@ class Transcriber:
 
 
 class WhisperHinglishTranscriber:
-    """Handles audio transcription using Oriserve/Whisper-Hindi2Hinglish-Swift model."""
+    """Handles audio transcription using Oriserve/Whisper-Hindi2Hinglish-Apex model."""
 
-    def __init__(self, model_id: str = "Oriserve/Whisper-Hindi2Hinglish-Swift"):
+    def __init__(self, model_id: str = "Oriserve/Whisper-Hindi2Hinglish-Apex"):
         """
         Initialize the Hinglish transcriber with specified Whisper model.
 

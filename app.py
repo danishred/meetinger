@@ -218,7 +218,7 @@ def main():
     # Configuration
     VIDEO_DIR = "/mnt/c/Users/danis/Videos"  # Windows Videos folder in WSL
     OUTPUT_DIR = "output"
-    OLLAMA_MODEL = "qwen2.5:7b"
+    OLLAMA_MODEL = "gemma2:9b-instruct-q4_K_M"
     CLEANUP_AUDIO = True  # Set to False to keep intermediate audio files
 
     # Model selection
