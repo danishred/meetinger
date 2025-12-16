@@ -40,6 +40,59 @@ timing_data = {
 }
 
 
+def get_video_from_input_folder():
+    """Check input folder for video files and return the path if exactly one exists"""
+    input_dir = Path("input")
+
+    if not input_dir.exists():
+        input_dir.mkdir(exist_ok=True)
+        return None
+
+    # Supported video extensions
+    video_extensions = {
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".mkv",
+        ".flv",
+        ".wmv",
+        ".webm",
+        ".m4v",
+        ".mpg",
+        ".mpeg",
+    }
+
+    # Find all video files in input folder
+    video_files = [
+        f
+        for f in input_dir.iterdir()
+        if f.is_file() and f.suffix.lower() in video_extensions
+    ]
+
+    if len(video_files) == 0:
+        console.print(
+            "[yellow]📂 Input folder is empty. Will prompt for video file.[/yellow]\n"
+        )
+        return None
+    elif len(video_files) == 1:
+        video_path = video_files[0]
+        console.print(
+            f"✅ [green]Found video in input folder:[/green] {video_path.name}"
+        )
+        return video_path
+    else:
+        console.print(
+            "[red]❌ Error: Multiple video files found in input folder![/red]"
+        )
+        console.print("[red]Please keep only one video file in the input folder:[/red]")
+        for vf in video_files:
+            console.print(f"   • {vf.name}")
+        console.print(
+            f"\n[yellow]📂 Input folder location:[/yellow] {input_dir.absolute()}"
+        )
+        return "multiple_files_error"
+
+
 def play_completion_sound():
     """Play a sound notification when processing is complete"""
     try:
@@ -157,6 +210,11 @@ def main():
     logging.info("Meeting Summary Generator - Starting")
     logging.info("=" * 60)
 
+    # Ensure input directory exists
+    input_dir = Path("input")
+    input_dir.mkdir(exist_ok=True)
+    console.print(f"📁 [dim]Input directory: {input_dir.absolute()}[/dim]")
+
     # Configuration
     VIDEO_DIR = "/mnt/c/Users/danis/Videos"  # Windows Videos folder in WSL
     OUTPUT_DIR = "output"
@@ -208,20 +266,41 @@ def main():
         return 1
     console.print("✅ [green]All dependencies satisfied![/green]")
 
-    # Step 2: Get most recent video file
-    logging.info("\n[Step 2/6] Finding most recent video file...")
-    console.print("🎥 [blue]Finding most recent video file...[/blue]")
-    video_path = get_most_recent_video(VIDEO_DIR)
-    if not video_path:
-        console.print(f"❌ [red]No video files found in {VIDEO_DIR} directory![/red]")
-        logging.error(f"No video files found in {VIDEO_DIR} directory")
-        logging.info(
-            f"Please place your video meeting recording in the {VIDEO_DIR} folder"
-        )
-        return 1
+    # Step 2: Get video file from input folder or prompt user
+    logging.info("\n[Step 2/6] Finding video file...")
+    console.print("🎥 [blue]Finding video file...[/blue]")
 
-    console.print(f"✅ [green]Video loaded successfully![/green] {video_path.name}")
-    logging.info(f"Processing: {video_path.name}")
+    # Check for video in input folder
+    video_path = get_video_from_input_folder()
+
+    if video_path == "multiple_files_error":
+        console.print("\n[red]Exiting due to multiple video files.[/red]")
+        return 1
+    elif video_path:
+        # Use the video from input folder
+        console.print(f"🎬 [cyan]Processing:[/cyan] {video_path.name}")
+        logging.info(f"Processing: {video_path.name}")
+    else:
+        # Fall back to current implementation - ask user for file
+        console.print("[cyan]Enter the path to the video file:[/cyan]")
+        video_path_str = input("> ").strip()
+
+        if not video_path_str:
+            console.print("[yellow]No path provided. Exiting.[/yellow]")
+            return 0
+
+        video_path = Path(video_path_str)
+
+        if not video_path.exists():
+            console.print(f"[red]❌ File not found: {video_path}[/red]")
+            return 1
+
+        if not video_path.is_file():
+            console.print(f"[red]❌ Path is not a file: {video_path}[/red]")
+            return 1
+
+        console.print(f"🎬 [cyan]Processing:[/cyan] {video_path.name}")
+        logging.info(f"Processing: {video_path.name}")
 
     # Check file size and warn if large
     video_size_mb = video_path.stat().st_size / (1024 * 1024)
