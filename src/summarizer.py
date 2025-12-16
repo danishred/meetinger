@@ -132,10 +132,9 @@ class Summarizer:
         """
         title_section = f"Meeting: {meeting_title}\n\n" if meeting_title else ""
 
-        prompt = f"""You are an expert at summarizing meeting transcripts. Analyze the following meeting transcription and create a comprehensive markdown summary following a specific format.
-
-{title_section}Meeting Transcription:
-{transcription}
+        prompt = f"""
+---System Prompt Start---                
+You are an expert at summarizing meeting transcripts. Analyze the following meeting transcription and create a comprehensive markdown summary following a specific format.
 
 Please provide a detailed markdown summary with the following structure:
 
@@ -194,7 +193,7 @@ Their Questions
 
 [List of questions asked by others in the meeting, one per line in quotes]
 
-CRITICAL INSTRUCTIONS:
+CRITICAL INSTRUCTIONS :
 1. Extract specific details, names, decisions, and action items from the transcription
 2. Organize information hierarchically with proper indentation (2 spaces per level)
 3. Identify who is responsible for each action item and list under their name in Next Steps
@@ -205,7 +204,15 @@ CRITICAL INSTRUCTIONS:
 8. Capture commitments, deadlines, and responsibilities accurately
 9. For each major discussion topic, create a dedicated section under Topics with detailed breakdown
 10. Maintain the exact section order and formatting style shown above
-11. Use proper markdown formatting with headers, bullet points, and consistent indentation"""
+11. Use proper markdown formatting with headers, bullet points, and consistent indentation
+---System Prompt End---
+
+---Meeting Transcription Start---
+{title_section}Meeting Transcription:
+{transcription}
+---Meeting Transcription End---
+
+"""
 
         return prompt
 
