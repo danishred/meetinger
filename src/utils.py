@@ -17,31 +17,47 @@ def setup_logging(level: int = logging.INFO) -> None:
     )
 
 
-def get_most_recent_mp4(video_dir: str) -> Optional[Path]:
+def get_most_recent_video(video_dir: str) -> Optional[Path]:
     """
-    Get the most recently modified MP4 file in the specified directory.
+    Get the most recently modified video file in the specified directory.
+    Supports multiple video formats and handles Windows to WSL path conversion.
 
     Args:
-        video_dir: Directory to search for MP4 files
+        video_dir: Directory to search for video files (can be Windows path)
 
     Returns:
-        Path to the most recent MP4 file, or None if no MP4 files found
+        Path to the most recent video file, or None if no video files found
     """
-    video_path = Path(video_dir)
+    # Convert Windows path to WSL path if needed
+    if video_dir.startswith("C:\\"):
+        # Convert Windows path like C:\Users\danis\Videos to WSL path
+        # C:\Users\danis\Videos -> /mnt/c/Users/danis/Videos
+        wsl_path = video_dir.replace("C:\\", "/mnt/c/").replace("\\", "/")
+        video_path = Path(wsl_path)
+        logging.info(f"Converted Windows path to WSL: {video_dir} -> {wsl_path}")
+    else:
+        video_path = Path(video_dir)
 
     if not video_path.exists():
-        logging.error(f"Video directory does not exist: {video_dir}")
+        logging.error(f"Video directory does not exist: {video_path}")
         return None
 
-    mp4_files = list(video_path.glob("*.mp4"))
+    # Supported video file extensions
+    video_extensions = ["*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm", "*.flv", "*.wmv", "*.m4v"]
+    
+    # Find all video files
+    video_files = []
+    for ext in video_extensions:
+        video_files.extend(video_path.glob(ext))
 
-    if not mp4_files:
-        logging.warning(f"No MP4 files found in {video_dir}")
+    if not video_files:
+        logging.warning(f"No video files found in {video_dir}")
+        logging.warning(f"Supported formats: {', '.join([ext[2:] for ext in video_extensions])}")
         return None
 
     # Sort by modification time and return the most recent
-    most_recent = max(mp4_files, key=lambda p: p.stat().st_mtime)
-    logging.info(f"Found most recent MP4: {most_recent.name}")
+    most_recent = max(video_files, key=lambda p: p.stat().st_mtime)
+    logging.info(f"Found most recent video: {most_recent.name}")
 
     return most_recent
 

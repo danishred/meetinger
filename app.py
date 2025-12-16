@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from utils import (
     setup_logging,
-    get_most_recent_mp4,
+    get_most_recent_video,
     ensure_output_dir,
     construct_output_path,
     check_dependencies,
@@ -34,7 +34,7 @@ def main():
     logging.info("=" * 60)
 
     # Configuration
-    VIDEO_DIR = "videos"
+    VIDEO_DIR = "/mnt/c/Users/danis/Videos"  # Windows Videos folder in WSL
     OUTPUT_DIR = "output"
     WHISPER_MODEL = "medium"
     OLLAMA_MODEL = "qwen2.5:7b"
@@ -48,13 +48,13 @@ def main():
         logging.info("Also ensure ffmpeg is installed and Ollama is running")
         return 1
 
-    # Step 2: Get most recent MP4 file
-    logging.info("\n[Step 2/6] Finding most recent MP4 file...")
-    video_path = get_most_recent_mp4(VIDEO_DIR)
+    # Step 2: Get most recent video file
+    logging.info("\n[Step 2/6] Finding most recent video file...")
+    video_path = get_most_recent_video(VIDEO_DIR)
     if not video_path:
-        logging.error(f"No MP4 files found in {VIDEO_DIR}/ directory")
+        logging.error(f"No video files found in {VIDEO_DIR} directory")
         logging.info(
-            f"Please place your MP4 meeting recording in the {VIDEO_DIR}/ folder"
+            f"Please place your video meeting recording in the {VIDEO_DIR} folder"
         )
         return 1
 
