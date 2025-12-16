@@ -29,7 +29,7 @@ from utils import (
 from video_processor import extract_audio_from_video, cleanup_audio_file
 from transcriber import Transcriber, WhisperHinglishTranscriber
 from summarizer import Summarizer
-from vad_processor import VADProcessor, process_audio_with_vad
+from src.vad_processor import VADProcessor, process_audio_with_vad
 
 # Initialize Rich console and timing tracker
 console = Console()
@@ -43,7 +43,8 @@ timing_data = {
 
 # Configuration options
 USE_VAD = True  # Enable/disable Voice Activity Detection
-VAD_AGGRESSIVENESS = 3  # VAD aggressiveness level (0-3)
+VAD_AGGRESSIVENESS = 2  # VAD aggressiveness level (0-3, 2=moderate)
+VAD_MODE = "moderate"  # VAD mode: 'conservative', 'moderate', or 'aggressive'
 CREATE_VISUALIZATION = True  # Create speech activity visualization
 
 
@@ -238,13 +239,25 @@ def main():
     )
     print("=" * 60)
 
-    choice = input("Enter choice (1 or 2): ").strip()
+    # Auto-select model for non-interactive environments
+    import sys
+
+    if sys.stdin.isatty():
+        # Interactive mode - prompt user
+        choice = input("Enter choice (1 or 2): ").strip()
+    else:
+        # Non-interactive mode - auto-select
+        choice = "1"  # Default to Whisper
+        print("Auto-selecting Whisper model (non-interactive mode)")
 
     if choice == "1":
         # Existing Whisper model
-        model_size = input(
-            "Enter Whisper model size (tiny, base, small, medium, large) [medium]: "
-        ).strip()
+        if sys.stdin.isatty():
+            model_size = input(
+                "Enter Whisper model size (tiny, base, small, medium, large) [medium]: "
+            ).strip()
+        else:
+            model_size = "medium"  # Default in non-interactive mode
         if not model_size:
             model_size = "medium"
         transcriber = Transcriber(model_size=model_size)
@@ -349,6 +362,7 @@ def main():
             start_time = time.time()
             filtered_audio_path, total_speech_duration = process_audio_with_vad(
                 audio_path=str(audio_path),
+                mode=VAD_MODE,
                 aggressiveness=VAD_AGGRESSIVENESS,
                 max_silence_duration=1.5,
                 min_speech_duration=0.5,
@@ -397,9 +411,13 @@ def main():
     # Transcribe audio and save to transcript folder
     with console.status("[bold green]Transcribing audio...[/bold green]") as status:
         start_time = time.time()
+        # Convert string path to Path object if needed
+        if isinstance(audio_to_transcribe, str):
+            audio_to_transcribe = Path(audio_to_transcribe)
         transcription = transcriber.transcribe_audio(
             audio_to_transcribe, video_base_name
         )
+        print(f"Audio file: {audio_to_transcribe} is being transcribed")
         stt_time = time.time() - start_time
         timing_data["stt_transcription"] = stt_time
 

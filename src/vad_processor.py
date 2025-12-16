@@ -21,6 +21,50 @@ import tempfile
 import os
 from dataclasses import dataclass
 
+# VAD Preset configurations for different use cases
+VAD_PRESETS = {
+    "conservative": {
+        "aggressiveness": 1,
+        "max_silence_duration": 2.0,
+        "min_speech_duration": 0.3,
+        "description": "Conservative mode - Preserves more audio, less aggressive filtering",
+    },
+    "moderate": {
+        "aggressiveness": 2,
+        "max_silence_duration": 1.5,
+        "min_speech_duration": 0.5,
+        "description": "Moderate mode - Balanced approach for general use",
+    },
+    "aggressive": {
+        "aggressiveness": 3,
+        "max_silence_duration": 1.0,
+        "min_speech_duration": 0.7,
+        "description": "Aggressive mode - Maximum filtering, keeps only clear speech",
+    },
+}
+
+
+def get_vad_preset_params(mode: str) -> dict:
+    """
+    Get VAD parameters for a specific preset mode.
+
+    Args:
+        mode: Preset mode name ('conservative', 'moderate', 'aggressive')
+
+    Returns:
+        Dictionary containing VAD parameters for the specified mode
+
+    Raises:
+        ValueError: If mode is not recognized
+    """
+    if mode not in VAD_PRESETS:
+        available_modes = list(VAD_PRESETS.keys())
+        raise ValueError(
+            f"Invalid VAD mode '{mode}'. Available modes: {available_modes}"
+        )
+
+    return VAD_PRESETS[mode].copy()
+
 
 @dataclass
 class SpeechSegment:
@@ -418,7 +462,7 @@ class VADProcessor:
             return segments
 
         except Exception as e:
-            logger.error(f"Error getting VAD segments: {e}")
+            logging.error(f"Error getting VAD segments: {e}")
             return []
 
 
@@ -428,6 +472,7 @@ def moderate_silence_cancellation(
     max_silence_duration: float = 1.5,
     min_speech_duration: float = 0.5,
     output_dir: str = "output",
+    mode: str = None,
 ) -> Tuple[str, float]:
     """
     Apply moderate silence cancellation to audio file.
@@ -439,17 +484,30 @@ def moderate_silence_cancellation(
 
     Args:
         audio_path: Path to the input audio file
-        aggressiveness: VAD aggressiveness level (0-3)
-        max_silence_duration: Maximum silence duration to preserve (seconds)
-        min_speech_duration: Minimum speech segment duration to keep (seconds)
+        aggressiveness: VAD aggressiveness level (0-3) - ignored if mode is provided
+        max_silence_duration: Maximum silence duration to preserve (seconds) - ignored if mode is provided
+        min_speech_duration: Minimum speech segment duration to keep (seconds) - ignored if mode is provided
         output_dir: Directory to save output files
+        mode: Preset mode name ('conservative', 'moderate', 'aggressive') - overrides other parameters
 
     Returns:
         Tuple of (processed_audio_path, total_speech_duration)
     """
     try:
+        # Use preset parameters if mode is specified
+        if mode:
+            preset_params = get_vad_preset_params(mode)
+            aggressiveness = preset_params["aggressiveness"]
+            max_silence_duration = preset_params["max_silence_duration"]
+            min_speech_duration = preset_params["min_speech_duration"]
+            logging.info(f"Using VAD preset: {mode} - {preset_params['description']}")
+
         # Initialize VAD processor
         vad_processor = VADProcessor(aggressiveness=aggressiveness)
+
+        logging.info(
+            f"VAD parameters: aggressiveness={aggressiveness}, max_silence={max_silence_duration}s, min_speech={min_speech_duration}s"
+        )
 
         # Detect speech segments
         audio_path_obj = Path(audio_path)
@@ -567,17 +625,19 @@ def process_audio_with_vad(
     min_speech_duration: float = 0.5,
     create_visualization: bool = True,
     output_dir: str = "output",
+    mode: str = None,
 ) -> Tuple[str, float]:
     """
     Process audio file with moderate silence cancellation and return the processed audio path and duration.
 
     Args:
         audio_path: Path to the input audio file
-        aggressiveness: VAD aggressiveness level (0-3)
-        max_silence_duration: Maximum silence duration to preserve (seconds)
-        min_speech_duration: Minimum speech segment duration to keep (seconds)
+        aggressiveness: VAD aggressiveness level (0-3) - ignored if mode is provided
+        max_silence_duration: Maximum silence duration to preserve (seconds) - ignored if mode is provided
+        min_speech_duration: Minimum speech segment duration to keep (seconds) - ignored if mode is provided
         create_visualization: Whether to create a visualization plot
         output_dir: Directory to save output files
+        mode: Preset mode name ('conservative', 'moderate', 'aggressive') - overrides other parameters
 
     Returns:
         Tuple of (processed_audio_path, total_speech_duration)
@@ -588,7 +648,168 @@ def process_audio_with_vad(
         max_silence_duration=max_silence_duration,
         min_speech_duration=min_speech_duration,
         output_dir=output_dir,
+        mode=mode,
     )
+
+
+# =============================================================================
+# PARAMETER TUNING GUIDE
+# =============================================================================
+"""
+VOICE ACTIVITY DETECTION (VAD) PARAMETER TUNING GUIDE
+======================================================
+
+This guide helps you understand and configure VAD parameters for optimal performance.
+
+## VAD AGGRESSIVENESS LEVELS (0-3)
+----------------------------------
+The aggressiveness parameter controls how sensitive the VAD is to detecting speech:
+
+### Level 0 (Conservative)
+- Lowest sensitivity to speech
+- Best for: High-quality audio with clear speech and minimal background noise
+- Use case: Studio recordings, clean audio with little to no background noise
+- May miss: Soft speech, distant speakers, speech with heavy accents
+
+### Level 1 (Moderate-Conservative)
+- Low sensitivity to speech
+- Best for: Good quality audio with some background noise
+- Use case: Professional meetings, clear phone calls
+- Balance: Fewer false positives while capturing most speech
+
+### Level 2 (Moderate) ⭐ RECOMMENDED
+- Medium sensitivity to speech
+- Best for: Most real-world scenarios with moderate background noise
+- Use case: Standard meetings, video conferences, typical audio recordings
+- Balance: Good trade-off between false positives and missed speech
+- This is the default and recommended setting for most applications
+
+### Level 3 (Aggressive)
+- Highest sensitivity to speech
+- Best for: Noisy environments with significant background noise
+- Use case: Crowded rooms, outdoor recordings, low-quality audio
+- Warning: May incorrectly classify some non-speech sounds as speech
+
+## SILENCE CANCELLATION PARAMETERS
+----------------------------------
+
+### max_silence_duration
+Maximum duration of silence to preserve between speech segments (in seconds).
+
+- Small values (0.5-1.0s): Aggressive silence removal, keeps only continuous speech
+- Medium values (1.5-2.0s): Moderate silence removal, preserves natural pauses ⭐
+- Large values (2.5-3.0s): Conservative silence removal, keeps most pauses
+
+### min_speech_duration
+Minimum duration of a speech segment to keep (in seconds).
+
+- Small values (0.1-0.3s): Keeps very short utterances, coughs, breaths
+- Medium values (0.5-0.7s): Filters out very short sounds, keeps normal speech ⭐
+- Large values (1.0-2.0s): Only keeps longer speech segments
+
+## PRESET MODES
+--------------
+
+### Conservative Mode
+- Aggressiveness: 1
+- Max Silence: 2.0s
+- Min Speech: 0.3s
+- Use when: You want to preserve as much audio as possible
+- Best for: High-quality recordings where every word matters
+
+### Moderate Mode (Default) ⭐
+- Aggressiveness: 2
+- Max Silence: 1.5s
+- Min Speech: 0.5s
+- Use when: You want a balanced approach for general use
+- Best for: Most meeting recordings, standard audio quality
+
+### Aggressive Mode
+- Aggressiveness: 3
+- Max Silence: 1.0s
+- Min Speech: 0.7s
+- Use when: You want maximum filtering and only clear speech
+- Best for: Noisy environments, when you need only the clearest speech
+
+## TROUBLESHOOTING
+-----------------
+
+### Problem: Too much background noise in processed audio
+Solutions:
+- Increase aggressiveness level (try 3)
+- Decrease max_silence_duration (try 1.0s)
+- Increase min_speech_duration (try 0.7s)
+- Use 'aggressive' preset mode
+
+### Problem: Missing speech segments or cutting off words
+Solutions:
+- Decrease aggressiveness level (try 1 or 0)
+- Increase max_silence_duration (try 2.0s)
+- Decrease min_speech_duration (try 0.3s)
+- Use 'conservative' preset mode
+
+### Problem: Audio sounds unnatural or choppy
+Solutions:
+- Increase max_silence_duration to preserve natural pauses
+- Use 'moderate' or 'conservative' preset
+- Check if aggressiveness is too high
+
+### Problem: Very short processing time or no audio output
+Solutions:
+- Check if audio file is valid and has speech
+- Decrease aggressiveness level
+- Decrease min_speech_duration
+- Verify audio file format (should be WAV, MP3, M4A, etc.)
+
+### Problem: Processing is too slow
+Solutions:
+- Ensure audio is not excessively long (consider splitting)
+- Check system resources (CPU, RAM)
+- Verify dependencies are properly installed
+
+## PERFORMANCE OPTIMIZATION
+--------------------------
+
+1. **Audio Quality**: Higher quality audio (16kHz+, 16-bit) works best
+2. **File Format**: WAV files process faster than compressed formats
+3. **Audio Length**: Consider splitting very long audio files (>1 hour)
+4. **Sample Rate**: 16000 Hz is optimal for WebRTC VAD
+
+## EXAMPLE USAGE
+---------------
+
+```python
+from vad_processor import process_audio_with_vad
+
+# Using preset mode (recommended)
+processed_audio, duration = process_audio_with_vad(
+    audio_path="meeting.wav",
+    mode="moderate"  # or "conservative", "aggressive"
+)
+
+# Using custom parameters
+processed_audio, duration = process_audio_with_vad(
+    audio_path="meeting.wav",
+    aggressiveness=2,
+    max_silence_duration=1.5,
+    min_speech_duration=0.5
+)
+```
+
+## ADVANCED CONFIGURATION
+------------------------
+
+For fine-tuning, you can access presets directly:
+
+```python
+from vad_processor import get_vad_preset_params
+
+params = get_vad_preset_params('moderate')
+# Returns: {'aggressiveness': 2, 'max_silence_duration': 1.5, ...}
+```
+
+Then modify individual parameters as needed for your specific use case.
+"""
 
 
 if __name__ == "__main__":
