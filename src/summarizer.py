@@ -6,6 +6,10 @@ import logging
 from pathlib import Path
 from typing import Optional
 import ollama
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class Summarizer:
@@ -132,15 +136,21 @@ class Summarizer:
             Formatted prompt string
         """
         title_section = f"Meeting: {meeting_title}\n\n" if meeting_title else ""
-
+        extras = os.getenv("extras")
+        if not extras:
+            print("⭕ No extra prompt provided.\n You can create a .env file in root of workspace with an 'extras' variable containing additional prompt if you like.")
+        else:
+            print("🔷 Extra Prompt is Provided")
+            
+        print(f"Additional Prompt: {extras}")
         prompt = f"""
 ---System Prompt Start---                
-You are an expert at summarizing meeting transcripts. Analyze the following meeting transcription and create a comprehensive markdown summary following a specific format.
+You are an expert at summarizing meeting transcripts. Analyze the following meeting transcription and create a comprehensive markdown summary following the below format.
 
 Please provide a detailed markdown summary with the following structure:
 
 [Meeting Title - use provided title or extract from transcript]
-VIEW RECORDING:
+
 Meeting Purpose
 
 [Brief statement of meeting goals and objectives]
@@ -179,26 +189,20 @@ Other Updates
 
 Next Steps
 
-  - [Assignee Name]:
+  - [Assignee Name](if you can find):
       - [Specific action item 1]
       - [Specific action item 2]
-  - [Assignee Name]:
+  - [Assignee Name](if you can find):
       - [Specific action item]
   - [Organize by person responsible]
 
-Your Questions
-
 [List of questions asked by the meeting participants, one per line in quotes]
-
-Their Questions
-
-[List of questions asked by others in the meeting, one per line in quotes]
 
 CRITICAL INSTRUCTIONS :
 1. Extract specific details, names, decisions, and action items from the transcription
 2. Organize information hierarchically with proper indentation (2 spaces per level)
 3. Identify who is responsible for each action item and list under their name in Next Steps
-4. Separate questions into "Your Questions" and "Their Questions" sections
+4. Have a questions and there answers section. Identify the asker and the one who answers if possible.
 5. Use clear, professional language throughout
 6. Focus on actionable information and decisions rather than general discussion
 7. Include specific details like model names, platform names, technical issues, and solutions
@@ -206,6 +210,7 @@ CRITICAL INSTRUCTIONS :
 9. For each major discussion topic, create a dedicated section under Topics with detailed breakdown
 10. Maintain the exact section order and formatting style shown above
 11. Use proper markdown formatting with headers, bullet points, and consistent indentation
+12. {extras}
 ---System Prompt End---
 
 ---Meeting Transcription Start---
