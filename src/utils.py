@@ -178,7 +178,6 @@ def check_dependencies() -> bool:
         "core": {
             "ffmpeg": False,
             "ollama": False,
-            "moviepy": False,
         },
         "whisper": {
             "whisper": False,
@@ -208,7 +207,6 @@ def check_dependencies() -> bool:
     _check_library_import("torch", dependencies["huggingface"])
     _check_library_import("transformers", dependencies["huggingface"])
     _check_library_import("accelerate", dependencies["huggingface"])
-    _check_library_import("moviepy", dependencies["core"])
 
     # Check for Ollama with server connectivity test
     _check_ollama_availability(dependencies["core"])
@@ -227,10 +225,6 @@ def check_dependencies() -> bool:
     # Check required core dependencies
     if not dependencies["core"]["ollama"]:
         logging.error("❌ Ollama is required for summarization")
-        return False
-
-    if not dependencies["core"]["moviepy"]:
-        logging.error("❌ MoviePy is required for video processing")
         return False
 
     if not whisper_backend_available and not huggingface_backend_available:
@@ -261,8 +255,8 @@ def _check_library_import(library_name: str, dependency_dict: dict) -> None:
         __import__(library_name)
         logging.info(f"✅ {library_name} library is available")
         dependency_dict[library_name] = True
-    except ImportError:
-        logging.warning(f"❌ {library_name} library not found")
+    except ImportError as e:
+        logging.warning(f"❌ {library_name} library not found: {e}")
         dependency_dict[library_name] = False
 
 
