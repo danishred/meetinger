@@ -978,6 +978,7 @@ Refer to the [Performance & Optimization](#performance--optimization) section fo
 - **v0.1.0** (2025-12-15): Initial release with basic Whisper + Ollama
 - **v0.5.0** (2025-12-16): Added VAD processing and Hinglish support
 - **v1.0.0** (2025-12-17): Production-ready with advanced features
+***Vibe Coded Yeah***
 
 ### Planned Features
 - [ ] **Automated testing suite** (pytest + fixtures)
@@ -1002,16 +1003,5 @@ Refer to the [Performance & Optimization](#performance--optimization) section fo
 
 ### Inspiration
 This project was inspired by the need for efficient meeting documentation in distributed teams and the amazing capabilities of modern AI models for speech processing and text generation.
-
----
-
-## 📞 Contact
-
-For questions, support, or collaboration opportunities:
-- **Repository**: [GitHub](https://github.com/your-repo/meetinger)
-- **Issues**: [GitHub Issues](https://github.com/your-repo/meetinger/issues)
-- **Email**: [your-email@example.com](mailto:your-email@example.com)
-
----
 
 **Happy Meeting Processing! 🎤✨**
