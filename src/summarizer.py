@@ -107,7 +107,7 @@ class Summarizer:
                 options={
                     "temperature": 0.3,  # Lower temperature for more focused output
                     "top_p": 0.9,
-                    "max_tokens": 2000,  # Limit output length
+                    "max_tokens": 16000,  # Limit output length
                 },
             )
 
@@ -155,6 +155,8 @@ Meeting Purpose
 
 [Brief statement of meeting goals and objectives]
 
+Stand up in brief - Write down what team stated during their stand up In brief points along with respective names
+
 Key Takeaways
 
   - [4-7 bullet points of most critical decisions, information, or outcomes]
@@ -196,7 +198,8 @@ Next Steps
       - [Specific action item]
   - [Organize by person responsible]
 
-[List of questions asked by the meeting participants, one per line in quotes]
+[List of questions asked by the meeting participants, one per line in quotes
+If possible include both the question and the answer and include names the relevant people involved]
 
 CRITICAL INSTRUCTIONS :
 1. Extract specific details, names, decisions, and action items from the transcription
@@ -211,6 +214,9 @@ CRITICAL INSTRUCTIONS :
 10. Maintain the exact section order and formatting style shown above
 11. Use proper markdown formatting with headers, bullet points, and consistent indentation
 12. {extras}
+
+Take your time
+
 ---System Prompt End---
 
 ---Meeting Transcription Start---
