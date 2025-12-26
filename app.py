@@ -573,7 +573,7 @@ def main():
 
     # Configuration
     OUTPUT_DIR = "output"
-    OLLAMA_MODEL = "gemma2:9b-instruct-q4_K_M"
+    OLLAMA_MODEL = "qwen2.5:7b-instruct-q4_K_M"
 
     print("=" * 60)
 
